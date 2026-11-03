@@ -238,10 +238,16 @@ class MainActivity : ComponentActivity() {
                         "फोन डायलर खोल रही हूँ।"
                     }
                 }
-                // Explicit contact-call command: one unique contact match is called directly.
-                (c.startsWith("call ") || c.startsWith("kivya call ") || c.startsWith("kivya, call ") ||
-                    c.contains("कॉल करो") || c.contains("कॉल लगाओ") || c.contains("कॉल करना")) -> {
-                    val contactName = command.replace(Regex("(?i)call|kivya|किव्या|किब्बया|कॉल करो|कॉल लगाओ|कॉल करना"), "").trim().trim(',', ' ')
+                // Natural Hindi/English contact-call phrases. A unique contact match is required.
+                Regex("(?i)^(hey\\s+)?kivya[, ]*").containsMatchIn(command.trim()) ||
+                    Regex("(?i)^(call|phone)\\s+").containsMatchIn(command.trim()) ||
+                    Regex("(कॉल\\s*(करो|लगाओ|करना)|फोन\\s*(करो|लगाओ|लगा\\s*दो|मिलाओ)|डायल\\s*करो)").containsMatchIn(c) -> {
+                    val contactName = command
+                        .replace(Regex("(?i)hey\\s+kivya|kivya|call|phone|please|to"), " ")
+                        .replace(Regex("(कॉल\\s*(करो|लगाओ|करना)|कॉल|फोन\\s*(करो|लगाओ|लगा\\s*दो|मिलाओ)|फोन|डायल\\s*करो|डायल|मुझे|जरा|प्लीज|कर दो|कर दीजिए)"), " ")
+                        .replace(Regex("(?i)\\bको\\b"), " ")
+                        .replace(Regex("\\s+"), " ")
+                        .trim(' ', ',', '।')
                     if (contactName.isBlank()) {
                         startActivity(Intent(Intent.ACTION_DIAL))
                         "किसे कॉल करना है? नाम बताइए।"
