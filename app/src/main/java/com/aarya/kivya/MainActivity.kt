@@ -116,6 +116,31 @@ class MainActivity : ComponentActivity() {
         setContent { KivyaHome(::startListening, ::say, ::phoneAction) }
     }
 
+    private fun findContactNumber(rawName: String): String? {
+        val projection = arrayOf(
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
+            ContactsContract.CommonDataKinds.Phone.NUMBER
+        )
+        val matches = mutableListOf<Pair<String, String>>()
+        contentResolver.query(
+            ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+            projection,
+            "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?",
+            arrayOf("%$rawName%"),
+            ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
+        )?.use { cursor ->
+            val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+            val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+            while (cursor.moveToNext()) {
+                val name = cursor.getString(nameIndex) ?: continue
+                val number = cursor.getString(numberIndex)?.trim().orEmpty()
+                if (number.isNotBlank()) matches.add(name to number)
+            }
+        }
+        val unique = matches.distinctBy { it.second }
+        return if (unique.size == 1) unique.first().second else null
+    }
+
     private fun resolveAndCallContact(rawName: String) {
         val name = rawName.trim()
         if (name.isBlank()) { say("किसे कॉल करना है? नाम बताइए।"); return }
@@ -228,21 +253,34 @@ class MainActivity : ComponentActivity() {
         val c = command.lowercase(Locale.ROOT)
         return try {
             when {
-                // Prepare a message in the Android share sheet; the user chooses WhatsApp or SMS and confirms sending there.
+                // Resolve a named contact when permission is already granted; never send without user confirmation.
                 ("मैसेज भेजो" in c || "मैसेज भेजना" in c || "message " in c && ("send" in c || "bhejo" in c) || "whatsapp पर" in c && "भेजो" in c || "sms" in c && "भेजो" in c) -> {
-                    val body = command.substringAfter(":", "").trim().ifBlank {
-                        command.replace(Regex("(?i)hey\\s+kivya|kivya|whatsapp|sms|message|send|bhejo|please|को|पर|मैसेज|मैसेज भेजो|भेजो|भेजना"), " ")
-                            .replace(Regex("\\s+"), " ").trim(' ', ',', '।')
-                    }
+                    val parts = command.split(":", limit = 2)
+                    val body = parts.getOrNull(1)?.trim().orEmpty()
+                    val recipient = parts[0]
+                        .replace(Regex("(?i)hey\\s+kivya|kivya|whatsapp|sms|message|send|bhejo|please|को|पर|मैसेज|मैसेज भेजो|भेजो|भेजना"), " ")
+                        .replace(Regex("\\s+"), " ").trim(' ', ',', '।')
                     if (body.isBlank()) {
-                        "कौन-सा मैसेज भेजना है? ‘मैसेज:’ लिखकर मैसेज बताइए।"
+                        "मैसेज का टेक्स्ट नहीं मिला। ऐसे बोलें: Rahul को मैसेज भेजो: मैं पहुँच रहा हूँ।"
+                    } else if (recipient.isBlank()) {
+                        "किसे भेजना है? ऐसे बोलें: Rahul को मैसेज भेजो: आपका मैसेज।"
+                    } else if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+                        "Contact खोजने के लिए Contacts permission दें, फिर यही command दोहराएँ।"
                     } else {
-                        val smsIntent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:")).putExtra("sms_body", body)
-                        val shareIntent = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, body)
-                        val chooser = Intent.createChooser(shareIntent, "WhatsApp या अन्य ऐप से मैसेज भेजें")
-                        chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(smsIntent))
-                        startActivity(chooser)
-                        "मैसेज तैयार है। WhatsApp या SMS चुनें, प्राप्तकर्ता चुनें और भेजने से पहले जाँच लें।"
+                        val number = findContactNumber(recipient)
+                        if (number.isNullOrBlank()) {
+                            "‘$recipient’ नाम का contact नहीं मिला। Contacts में नाम जाँचें।"
+                        } else if ("whatsapp" in c || "व्हाट्सएप" in c) {
+                            val digits = number.filter { it.isDigit() }
+                            val waUrl = "https://wa.me/$digits?text=" + Uri.encode(body)
+                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(waUrl)))
+                            "WhatsApp में $recipient के लिए मैसेज तैयार है। भेजने से पहले जाँचकर Send दबाएँ।"
+                        } else {
+                            val smsIntent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$number"))
+                                .putExtra("sms_body", body)
+                            startActivity(smsIntent)
+                            "SMS में $recipient के लिए मैसेज तैयार है। जाँचकर Send दबाएँ।"
+                        }
                     }
                 }
                 // Open the system Phone app so the user can review recent calls and call history.
