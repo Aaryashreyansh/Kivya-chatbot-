@@ -1,40 +1,61 @@
-# Kivya AI backend (starter)
+# KIVYA AI backend
 
-This is a small FastAPI service that sends chat requests to Amazon Bedrock in
-`ap-south-1` by default. It is a scaffold, not a deployed service.
+FastAPI backend for KIVYA. It sends chat requests to the Google Gemini API.
+The default model is gemini-2.5-flash. Change it with GEMINI_MODEL only after
+checking that the selected model is available to the project's Free Tier.
 
-## Safety and deployment notes
+## Configuration
 
-- Never put AWS access keys, Bedrock credentials, or the API token in the Android APK.
-- Run this service with an AWS IAM role (for example, a role attached to the
-  eventual compute service). Do not create long-lived IAM user keys for the app.
-- Restrict IAM to the selected Bedrock inference profile and the required
-  foundation-model resources. Do not grant `bedrock:*`.
-- Keep the service behind HTTPS. Set a strong `KIVYA_API_TOKEN` using the
-  hosting provider's secret manager, not a committed file.
-- Configure `CORS_ORIGINS` only for trusted web origins. Native Android is not
-  governed by browser CORS.
-- The chat endpoint has a 6,000-character input limit and a capped output-token
-  setting. Model calls are billable. Do not deploy or enable inference until
-  model access, current pricing, and an adult account owner's spending approval
-  have been checked.
-- No GitHub write, AWS deployment, shell, or other tool execution is exposed
-  by this endpoint. Those capabilities need separate scoped permissions and
-  explicit per-action confirmation.
+Set these environment variables in the hosting platform's secret/configuration
+manager. Never commit a .env file or put secrets in the Android APK.
 
-## Configure and run locally
+- GEMINI_API_KEY: API key created in Google AI Studio. Store as a secret.
+- KIVYA_API_TOKEN: a separate, long random token used by the Android app to
+  authenticate with this backend. Store as a secret.
+- GEMINI_MODEL: optional; defaults to gemini-2.5-flash.
+- MAX_OUTPUT_TOKENS: optional; defaults to 600 and is capped at 1200.
+- GEMINI_TIMEOUT_SECONDS: optional; defaults to 25 seconds.
+- CORS_ORIGINS: optional comma-separated trusted web origins.
 
-1. Create a virtual environment and install `requirements.txt`.
-2. Copy `.env.example` to `.env` locally. Never commit `.env`.
-3. Set `BEDROCK_MODEL_ID` to the exact verified model or inference-profile ID.
-4. Set `KIVYA_API_TOKEN` to a long random secret.
-5. Authenticate the local AWS SDK through an approved AWS role/profile.
-6. Start with `uvicorn main:app --host 127.0.0.1 --port 8000` from this directory.
+## Free-tier and cost safeguards
 
-Health check: `GET /health`
+- Use a Google AI Studio project that is explicitly on the Gemini API Free Tier.
+  Free-tier eligibility and per-model quotas vary by project and can change.
+- Do not link a billing account to this project if the intention is to keep
+  Gemini API inference free. If the free quota is exhausted, the endpoint
+  returns HTTP 429 and does not switch to a paid model or paid provider.
+- Review the current model availability, rate limits, and terms in Google AI
+  Studio before enabling the key. Free-tier availability is not guaranteed.
+- The Gemini API Free Tier may use submitted prompts and responses to improve
+  Google's products. Do not send passwords, personal contact details, private
+  messages, or other sensitive information to this endpoint.
+- AWS hosting is separate from Gemini API usage and can still incur AWS charges.
+  Do not deploy billable AWS resources until the account owner/guardian approves
+  the service and its spending.
 
-Chat: `POST /v1/chat` with JSON `{"message":"नमस्ते","language":"hi"}`
-and header `Authorization: Bearer <your-token>`.
+## Security
 
-The current app still needs an Android API client and a configured HTTPS backend
-URL before the AI Tools mode can use this service.
+- Keep GEMINI_API_KEY and KIVYA_API_TOKEN in AWS Secrets Manager or the
+  hosting platform's secret manager, never in source code, GitHub, logs, or APK.
+- Use HTTPS and restrict access to the backend.
+- Use a strong KIVYA_API_TOKEN; the Android app sends it as a Bearer token.
+- Native Android is not governed by browser CORS.
+- The endpoint only answers chat requests. It does not execute phone actions,
+  access contacts, make calls, or run shell/GitHub/AWS operations.
+
+## Run locally
+
+1. Create a Python virtual environment.
+2. Install dependencies: pip install -r requirements.txt.
+3. Set GEMINI_API_KEY and KIVYA_API_TOKEN in your local environment.
+4. Start from this directory:
+   uvicorn main:app --host 127.0.0.1 --port 8000
+
+Health check: GET /health
+
+Chat: POST /v1/chat with JSON
+{"message":"नमस्ते","language":"hi"} and header
+Authorization: Bearer <your-token>.
+
+The Android app still needs its API client and configured HTTPS backend URL
+before AI Studio mode can call this endpoint.
