@@ -84,14 +84,21 @@ class MainActivity : ComponentActivity() {
     private lateinit var callPermissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
     private var pendingContactName: String? = null
     private var pendingCallNumber: String? = null
+    private var pendingMessageCommand: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         contactsPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             val name = pendingContactName
+            val messageCommand = pendingMessageCommand
             pendingContactName = null
-            if (granted && !name.isNullOrBlank()) resolveAndCallContact(name)
-            else say("Contacts permission नहीं मिली। कॉल नहीं की गई।")
+            pendingMessageCommand = null
+            when {
+                granted && !name.isNullOrBlank() -> resolveAndCallContact(name)
+                granted && !messageCommand.isNullOrBlank() -> say(phoneAction(messageCommand))
+                !granted && !messageCommand.isNullOrBlank() -> say("Contacts permission नहीं मिली। मैसेज तैयार नहीं किया गया।")
+                !granted -> say("Contacts permission नहीं मिली। कॉल नहीं की गई।")
+            }
         }
         callPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             val number = pendingCallNumber
@@ -116,12 +123,12 @@ class MainActivity : ComponentActivity() {
         setContent { KivyaHome(::startListening, ::say, ::phoneAction) }
     }
 
-    private fun findContactNumber(rawName: String): String? {
+    private fun findContactNumbers(rawName: String): List<String> {
         val projection = arrayOf(
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
             ContactsContract.CommonDataKinds.Phone.NUMBER
         )
-        val matches = mutableListOf<Pair<String, String>>()
+        val matches = mutableListOf<String>()
         contentResolver.query(
             ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
             projection,
@@ -132,13 +139,12 @@ class MainActivity : ComponentActivity() {
             val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
             val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
             while (cursor.moveToNext()) {
-                val name = cursor.getString(nameIndex) ?: continue
+                val displayName = cursor.getString(nameIndex) ?: continue
                 val number = cursor.getString(numberIndex)?.trim().orEmpty()
-                if (number.isNotBlank()) matches.add(name to number)
+                if (number.isNotBlank() && displayName.contains(rawName, ignoreCase = true)) matches.add(number)
             }
         }
-        val unique = matches.distinctBy { it.second }
-        return if (unique.size == 1) unique.first().second else null
+        return matches.distinct()
     }
 
     private fun resolveAndCallContact(rawName: String) {
@@ -265,21 +271,29 @@ class MainActivity : ComponentActivity() {
                     } else if (recipient.isBlank()) {
                         "किसे भेजना है? ऐसे बोलें: Rahul को मैसेज भेजो: आपका मैसेज।"
                     } else if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
-                        "Contact खोजने के लिए Contacts permission दें, फिर यही command दोहराएँ।"
+                        pendingMessageCommand = command
+                        contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                        "Contact permission माँग रही हूँ। अनुमति मिलने पर मैसेज तैयार होगा।"
                     } else {
-                        val number = findContactNumber(recipient)
-                        if (number.isNullOrBlank()) {
-                            "‘$recipient’ नाम का contact नहीं मिला। Contacts में नाम जाँचें।"
-                        } else if ("whatsapp" in c || "व्हाट्सएप" in c) {
-                            val digits = number.filter { it.isDigit() }
-                            val waUrl = "https://wa.me/$digits?text=" + Uri.encode(body)
-                            startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(waUrl)))
-                            "WhatsApp में $recipient के लिए मैसेज तैयार है। भेजने से पहले जाँचकर Send दबाएँ।"
-                        } else {
-                            val smsIntent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:$number"))
-                                .putExtra("sms_body", body)
-                            startActivity(smsIntent)
-                            "SMS में $recipient के लिए मैसेज तैयार है। जाँचकर Send दबाएँ।"
+                        val numbers = findContactNumbers(recipient)
+                        when {
+                            numbers.isEmpty() -> "‘$recipient’ नाम का contact नहीं मिला। Contacts में नाम जाँचें।"
+                            numbers.size > 1 -> "‘$recipient’ के कई नंबर मिले। Contact का पूरा नाम बताइए।"
+                            "whatsapp" in c || "व्हाट्सएप" in c -> {
+                                val digits = numbers.first().filter { it.isDigit() }
+                                if (digits.length < 8) "Contact का नंबर सही नहीं लग रहा। Contacts में जाँचें।"
+                                else {
+                                    val waUrl = "https://wa.me/$digits?text=" + Uri.encode(body)
+                                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(waUrl)))
+                                    "WhatsApp में $recipient के लिए मैसेज तैयार है। भेजने से पहले जाँचकर Send दबाएँ।"
+                                }
+                            }
+                            else -> {
+                                val smsIntent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:${numbers.first()}"))
+                                    .putExtra("sms_body", body)
+                                startActivity(smsIntent)
+                                "SMS में $recipient के लिए मैसेज तैयार है। जाँचकर Send दबाएँ।"
+                            }
                         }
                     }
                 }
