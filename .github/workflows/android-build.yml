@@ -15,9 +15,15 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build debug APK
-        run: gradle assembleDebug
-      - uses: actions/upload-artifact@v4
+      - name: Build debug and optimized test release APKs
+        run: gradle assembleDebug assembleRelease
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
         with:
           name: kivya-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+      - name: Upload optimized test release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: kivya-test-release-apk
+          path: app/build/outputs/apk/release/app-release.apk
