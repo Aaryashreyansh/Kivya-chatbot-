@@ -293,7 +293,7 @@ class MainActivity : ComponentActivity() {
                     if (query.isBlank()) {
                         openWeb("https://music.youtube.com", "YouTube Music खोल रही हूँ।")
                     } else {
-                        val mediaIntent = Intent(Intent.ACTION_MEDIA_SEARCH).apply {
+                        val mediaIntent = Intent("android.intent.action.MEDIA_SEARCH").apply {
                             putExtra(SearchManager.QUERY, query)
                             putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "audio/*")
                             putExtra(MediaStore.EXTRA_MEDIA_TITLE, query)
