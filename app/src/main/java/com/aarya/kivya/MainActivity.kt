@@ -112,10 +112,10 @@ class MainActivity : ComponentActivity() {
                 // Open the system Phone app so the user can review recent calls and call history.
                 "कॉल हिस्ट्री" in c || "कॉल लॉग" in c || "recent calls" in c || "call history" in c || "call log" in c -> {
                     val phoneIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_PHONE)
-                    if (phoneIntent.resolveActivity(packageManager) != null) {
+                    try {
                         startActivity(phoneIntent)
                         "फोन ऐप में Recent Calls खोल रही हूँ।"
-                    } else {
+                    } catch (_: Exception) {
                         startActivity(Intent(Intent.ACTION_DIAL))
                         "फोन डायलर खोल रही हूँ।"
                     }
