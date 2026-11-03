@@ -16,9 +16,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -311,17 +309,13 @@ private fun KivyaMark(modifier: Modifier = Modifier) {
 
 @Composable
 private fun VoiceOrb(listening: Boolean) {
-    val transition = rememberInfiniteTransition(label = "kivya-orb")
-    val pulse by transition.animateFloat(
-        initialValue = 0.88f, targetValue = 1.12f,
-        animationSpec = infiniteRepeatable(tween(1250, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+    // Keep the orb still while idle to avoid a permanent animation/render loop.
+    val pulse by animateFloatAsState(
+        targetValue = if (listening) 1.08f else 1f,
+        animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
         label = "pulse"
     )
-    val spin by transition.animateFloat(
-        initialValue = 0f, targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(9000, easing = FastOutSlowInEasing)),
-        label = "spin"
-    )
+    val spin = if (listening) 24f else 0f
     Box(Modifier.size(174.dp), contentAlignment = Alignment.Center) {
         Canvas(Modifier.fillMaxSize()) {
             val c = Offset(size.width / 2, size.height / 2)
