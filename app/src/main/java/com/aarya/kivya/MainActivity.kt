@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.provider.Settings
 import android.provider.AlarmClock
 import android.provider.CalendarContract
+import android.provider.MediaStore
 import android.app.SearchManager
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
@@ -268,6 +269,26 @@ class MainActivity : ComponentActivity() {
                         "$number डायलर में तैयार है। कॉल करने के लिए फोन ऐप में Call दबाएँ।"
                     }
                 }
+                // Search for requested music in the device's music app, then fall back to YouTube Music.
+                ("म्यूजिक" in c || "म्यूज़िक" in c || "गाना" in c || "गाने" in c || "music" in c || Regex("(?i)\\bplay\\b").containsMatchIn(c)) -> {
+                    val query = command.replace(Regex("(?i)hey\\s+kivya|kivya|please|play|music|song|songs|गाना|गाने|म्यूजिक|म्यूज़िक|चलाओ|बजाओ|सुना दो|सुनाओ|पर"), " ")
+                        .replace(Regex("\\s+"), " ").trim(' ', ',', '।')
+                    if (query.isBlank()) {
+                        openWeb("https://music.youtube.com", "YouTube Music खोल रही हूँ।")
+                    } else {
+                        val mediaIntent = Intent(Intent.ACTION_MEDIA_SEARCH).apply {
+                            putExtra(SearchManager.QUERY, query)
+                            putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "audio/*")
+                            putExtra(MediaStore.EXTRA_MEDIA_TITLE, query)
+                        }
+                        try {
+                            startActivity(mediaIntent)
+                            "‘$query’ म्यूजिक ऐप में खोज रही हूँ।"
+                        } catch (_: Exception) {
+                            openWeb("https://music.youtube.com/search?q=" + Uri.encode(query), "YouTube Music पर ‘$query’ खोज रही हूँ।")
+                        }
+                    }
+                }
                 // Open Android's alarm UI; the user reviews and saves the alarm there.
                 ("अलार्म" in c || "alarm" in c) -> {
                     val time = Regex("(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?", RegexOption.IGNORE_CASE).find(c)
@@ -428,7 +449,8 @@ private fun KivyaHome(
             "maps", "मैप", "नक्शा", "chrome", "क्रोम", "messages", "मैसेज",
             "call history", "कॉल हिस्ट्री", "कॉल लॉग", "recent calls",
             "खोजो", "ढूंढो", "सर्च", "search", "समय", "टाइम", "time",
-            "open ", "launch ", "start ", "खोलो", "खोलना", "ओपन करो", "चालू करो"
+            "open ", "launch ", "start ", "खोलो", "खोलना", "ओपन करो", "चालू करो",
+            "music", "म्यूजिक", "म्यूज़िक", "गाना", "गाने", "play "
         ).any { normalized.contains(it) }
         if (isDeviceCommand) {
             val answer = phoneAction(text)
