@@ -1,7 +1,7 @@
 name: Android CI
 on:
   push:
-    branches: [ main ]
+    branches: [ main, feature/call-pickup-wakeword ]
   workflow_dispatch:
 permissions:
   contents: write
