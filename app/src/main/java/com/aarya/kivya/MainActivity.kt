@@ -354,13 +354,24 @@ private fun KivyaHome(
     var prompt by remember { mutableStateOf("") }
     var response by remember { mutableStateOf("हेलो आर्या, स्वागत है। मैं KIVYA हूँ। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?") }
     var listening by remember { mutableStateOf(false) }
-    val chat = remember { mutableStateListOf("KIVYA: हेलो आर्या, स्वागत है। मैं आपकी मदद के लिए तैयार हूँ।") }
+    val memory = remember { KivyaMemory(context) }
+    val chat = remember {
+        mutableStateListOf<String>().apply {
+            addAll(memory.load())
+            if (isEmpty()) add("KIVYA: हेलो, मैं आपकी मदद के लिए तैयार हूँ।")
+        }
+    }
+
+    fun saveMemory() {
+        memory.save(chat.toList())
+    }
 
     val scope = rememberCoroutineScope()
 
     fun process(text: String) {
         prompt = text
         chat.add("तुम: $text")
+        saveMemory()
         val normalized = text.lowercase(Locale.ROOT)
         val isDeviceCommand = listOf(
             "settings", "सेटिंग", "wifi", "wi-fi", "वाईफाई", "ब्लूटूथ", "bluetooth",
@@ -375,6 +386,7 @@ private fun KivyaHome(
             val answer = phoneAction(text)
             response = answer
             chat.add("KIVYA: $answer")
+            saveMemory()
             speak(answer)
         } else {
             response = "KIVYA जवाब तैयार कर रही है..."
@@ -406,6 +418,7 @@ private fun KivyaHome(
                 }
                 response = answer
                 chat.add("KIVYA: $answer")
+                saveMemory()
                 speak(answer)
             }
         }
