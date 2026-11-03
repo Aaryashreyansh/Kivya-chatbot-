@@ -718,6 +718,19 @@ private fun KivyaHome(
         }
     }
 
+    LaunchedEffect(Unit) {
+        val activity = context as? MainActivity
+        if (activity?.intent?.getBooleanExtra(KivyaWakeWordService.EXTRA_WAKE_WORD, false) == true) {
+            activity.intent.removeExtra(KivyaWakeWordService.EXTRA_WAKE_WORD)
+            delay(500)
+            listening = true
+            listen(
+                { words -> listening = false; process(words) },
+                { error -> listening = false; response = error }
+            )
+        }
+    }
+
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
         if (allowed) {
             listening = true
