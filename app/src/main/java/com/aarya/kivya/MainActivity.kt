@@ -239,7 +239,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
                 // Natural Hindi/English contact-call phrases. A unique contact match is required.
-                Regex("(?i)^(hey\\s+)?kivya[, ]*").containsMatchIn(command.trim()) ||
+                Regex("(?i)^(hey\\s+)?kivya[, ]*(call|phone)\\s+").containsMatchIn(command.trim()) ||
                     Regex("(?i)^(call|phone)\\s+").containsMatchIn(command.trim()) ||
                     Regex("(कॉल\\s*(करो|लगाओ|करना)|फोन\\s*(करो|लगाओ|लगा\\s*दो|मिलाओ)|डायल\\s*करो)").containsMatchIn(c) -> {
                     val contactName = command
