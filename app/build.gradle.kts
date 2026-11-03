@@ -10,6 +10,16 @@ android {
     buildFeatures { compose = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
+    buildTypes {
+        getByName("release") {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            // Temporary test signing so the optimized APK can be installed for device testing.
+            // Replace with a private production keystore before Play Store distribution.
+            signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+        }
+    }
 }
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
@@ -20,7 +30,5 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
-    // On-device wake-word inference runtime (model assets are added in the next milestone).
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.26.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
