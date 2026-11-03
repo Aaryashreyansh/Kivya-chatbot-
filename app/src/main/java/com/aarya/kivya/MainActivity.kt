@@ -69,6 +69,7 @@ import org.json.JSONObject
 import org.json.JSONArray
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 
 private val Deep = Color(0xFF070B16)
@@ -492,6 +493,7 @@ private fun KivyaHome(
     var response by remember { mutableStateOf("हेलो आर्या, स्वागत है। मैं KIVYA हूँ। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?") }
     var listening by remember { mutableStateOf(false) }
     val memory = remember { KivyaMemory(context) }
+    val automation = remember { KivyaAutomation(context) }
     val chat = remember {
         mutableStateListOf<String>().apply {
             addAll(memory.load())
@@ -510,6 +512,74 @@ private fun KivyaHome(
         chat.add("तुम: $text")
         saveMemory()
         val normalized = text.lowercase(Locale.ROOT)
+        val routineCreatePrefix = listOf("रूटीन बनाओ:", "रूटीन सेव करो:", "create routine:", "save routine:")
+            .firstOrNull { normalized.startsWith(it) }
+        when {
+            routineCreatePrefix != null -> {
+                val spec = text.substring(routineCreatePrefix.length).trim()
+                val separator = spec.indexOf('=')
+                if (separator <= 0) {
+                    response = "ऐसे बोलें: रूटीन बनाओ: Morning = YouTube खोलो; Chrome खोलो"
+                } else {
+                    val name = spec.substring(0, separator).trim()
+                    val steps = spec.substring(separator + 1).split(';')
+                    val error = automation.save(name, steps)
+                    response = error ?: "‘$name’ रूटीन सेव हो गया। इसमें ${steps.count { it.isNotBlank() }} steps हैं।"
+                }
+                chat.add("KIVYA: $response")
+                saveMemory()
+                speak(response)
+                return
+            }
+            normalized in listOf("मेरे रूटीन दिखाओ", "रूटीन दिखाओ", "list routines", "show routines") -> {
+                val names = automation.names()
+                response = if (names.isEmpty()) "अभी कोई routine सेव नहीं है।"
+                    else "आपके routines: " + names.joinToString(", ")
+                chat.add("KIVYA: $response")
+                saveMemory()
+                speak(response)
+                return
+            }
+            normalized.startsWith("रूटीन चलाओ ") || normalized.startsWith("run routine ") -> {
+                val prefix = if (normalized.startsWith("रूटीन चलाओ ")) "रूटीन चलाओ " else "run routine "
+                val name = text.substring(prefix.length).trim()
+                val steps = automation.get(name)
+                if (steps == null) {
+                    response = "‘$name’ नाम का routine नहीं मिला। ‘मेरे रूटीन दिखाओ’ बोलें।"
+                    chat.add("KIVYA: $response")
+                    saveMemory()
+                    speak(response)
+                } else {
+                    response = "‘$name’ routine शुरू हो रहा है..."
+                    speak(response)
+                    scope.launch {
+                        val results = mutableListOf<String>()
+                        steps.forEachIndexed { index, step ->
+                            response = "‘$name’ routine: ${index + 1}/${steps.size}..."
+                            val result = phoneAction(step)
+                            results.add(result)
+                            chat.add("KIVYA: $result")
+                            saveMemory()
+                            if (index < steps.lastIndex) delay(900)
+                        }
+                        response = "‘$name’ routine पूरा हुआ।\n" + results.joinToString("\n")
+                        chat.add("KIVYA: $response")
+                        saveMemory()
+                        speak("‘$name’ routine पूरा हुआ।")
+                    }
+                }
+                return
+            }
+            normalized.startsWith("रूटीन हटाओ ") || normalized.startsWith("delete routine ") -> {
+                val prefix = if (normalized.startsWith("रूटीन हटाओ ")) "रूटीन हटाओ " else "delete routine "
+                val name = text.substring(prefix.length).trim()
+                response = if (automation.delete(name)) "‘$name’ routine हटा दिया।" else "‘$name’ routine नहीं मिला।"
+                chat.add("KIVYA: $response")
+                saveMemory()
+                speak(response)
+                return
+            }
+        }
         val rememberPrefix = listOf("याद रखो:", "याद रखना:", "remember:", "remember that ")
             .firstOrNull { normalized.startsWith(it) }
         when {
