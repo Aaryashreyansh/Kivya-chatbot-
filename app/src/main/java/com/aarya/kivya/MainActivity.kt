@@ -510,6 +510,44 @@ private fun KivyaHome(
         chat.add("तुम: $text")
         saveMemory()
         val normalized = text.lowercase(Locale.ROOT)
+        val rememberPrefix = listOf("याद रखो:", "याद रखना:", "remember:", "remember that ")
+            .firstOrNull { normalized.startsWith(it) }
+        when {
+            rememberPrefix != null -> {
+                val note = text.substring(rememberPrefix.length).trim()
+                response = if (memory.rememberNote(note)) "ठीक है, इसे इस डिवाइस की KIVYA memory में सेव कर लिया।"
+                    else "क्या याद रखना है? ‘याद रखो: ...’ लिखें।"
+                chat.add("KIVYA: $response")
+                saveMemory()
+                speak(response)
+                return
+            }
+            normalized in listOf("मेरी यादें दिखाओ", "यादें दिखाओ", "show my memories", "what do you remember") -> {
+                val notes = memory.loadNotes()
+                response = if (notes.isEmpty()) "अभी कोई अलग से सेव की हुई याद नहीं है।"
+                    else "मेरी सेव की हुई यादें:\\n" + notes.takeLast(10).mapIndexed { index, note -> "${index + 1}. $note" }.joinToString("\\n")
+                chat.add("KIVYA: $response")
+                saveMemory()
+                speak(response)
+                return
+            }
+            normalized in listOf("सब यादें मिटाओ", "मेरी यादें मिटाओ", "forget my memories", "clear saved memories") -> {
+                memory.forgetNotes()
+                response = "सेव की हुई यादें मिटा दी गई हैं। बातचीत का इतिहास अलग से मौजूद है।"
+                chat.add("KIVYA: $response")
+                saveMemory()
+                speak(response)
+                return
+            }
+            normalized in listOf("चैट हिस्ट्री मिटाओ", "बातचीत मिटाओ", "clear chat history") -> {
+                memory.forgetHistory()
+                chat.clear()
+                chat.add("KIVYA: बातचीत का इतिहास साफ कर दिया।")
+                response = "बातचीत का इतिहास साफ कर दिया। सेव की हुई यादें सुरक्षित हैं।"
+                speak(response)
+                return
+            }
+        }
         val isDeviceCommand = listOf(
             "settings", "सेटिंग", "wifi", "wi-fi", "वाईफाई", "ब्लूटूथ", "bluetooth",
             "youtube", "यूट्यूब", "whatsapp", "व्हाट्सएप", "instagram", "इंस्टाग्राम",
@@ -547,6 +585,9 @@ private fun KivyaHome(
                                 .put("message", text)
                                 .put("language", "auto")
                                 .put("history", history)
+                                .put("saved_memory", JSONArray().apply {
+                                    memory.loadNotes().takeLast(10).forEach { put(it) }
+                                })
                                 .toString()
                             connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
                             val status = connection.responseCode
