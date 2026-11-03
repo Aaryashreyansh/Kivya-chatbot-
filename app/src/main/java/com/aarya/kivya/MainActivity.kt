@@ -3,6 +3,7 @@ package com.aarya.kivya
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.provider.ContactsContract
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -69,14 +70,86 @@ private val Muted = Color(0xFF91A2BA)
 class MainActivity : ComponentActivity() {
     private var tts: TextToSpeech? = null
     private var speech: SpeechRecognizer? = null
+    private lateinit var contactsPermissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
+    private lateinit var callPermissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
+    private var pendingContactName: String? = null
+    private var pendingCallNumber: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        contactsPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val name = pendingContactName
+            pendingContactName = null
+            if (granted && !name.isNullOrBlank()) resolveAndCallContact(name)
+            else say("Contacts permission नहीं मिली। कॉल नहीं की गई।")
+        }
+        callPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            val number = pendingCallNumber
+            pendingCallNumber = null
+            if (granted && !number.isNullOrBlank()) placeDirectCall(number)
+            else say("Phone permission नहीं मिली। कॉल नहीं की गई।")
+        }
         tts = TextToSpeech(this) { status ->
             if (status == TextToSpeech.SUCCESS) tts?.language = Locale("hi", "IN")
         }
         if (SpeechRecognizer.isRecognitionAvailable(this)) speech = SpeechRecognizer.createSpeechRecognizer(this)
         setContent { KivyaHome(::startListening, ::say, ::phoneAction) }
+    }
+
+    private fun resolveAndCallContact(rawName: String) {
+        val name = rawName.trim()
+        if (name.isBlank()) { say("किसे कॉल करना है? नाम बताइए।"); return }
+        if (checkSelfPermission(Manifest.permission.READ_CONTACTS) != PackageManager.PERMISSION_GRANTED) {
+            pendingContactName = name
+            contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+            return
+        }
+        val matches = mutableListOf<Pair<String, String>>()
+        val projection = arrayOf(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER)
+        try {
+            contentResolver.query(
+                ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                projection,
+                "${ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME} LIKE ?",
+                arrayOf("%$name%"),
+                ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " ASC"
+            )?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+                val numberIndex = cursor.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                while (cursor.moveToNext()) {
+                    val contactName = cursor.getString(nameIndex) ?: continue
+                    val number = cursor.getString(numberIndex)?.filter { it.isDigit() || it == '+' } ?: continue
+                    if (number.isNotBlank() && matches.none { it.second == number }) matches.add(contactName to number)
+                }
+            }
+        } catch (_: Exception) { say("Contacts पढ़ने में समस्या हुई।"); return }
+        when {
+            matches.isEmpty() -> say("$name नाम का contact नहीं मिला।")
+            matches.size == 1 -> {
+                say(matches[0].first + " को कॉल कर रही हूँ।")
+                requestAndPlaceCall(matches[0].second)
+            }
+            else -> say("$name नाम के कई contacts मिले। पूरा नाम बोलिए, जैसे Rahul Kumar।")
+        }
+    }
+
+    private fun requestAndPlaceCall(number: String) {
+        if (checkSelfPermission(Manifest.permission.CALL_PHONE) == PackageManager.PERMISSION_GRANTED) {
+            placeDirectCall(number)
+        } else {
+            pendingCallNumber = number
+            callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+        }
+    }
+
+    private fun placeDirectCall(number: String) {
+        try {
+            startActivity(Intent(Intent.ACTION_CALL, Uri.parse("tel:$number")))
+        } catch (_: SecurityException) {
+            say("कॉल की अनुमति नहीं मिली।")
+        } catch (_: Exception) {
+            say("फोन कॉल शुरू नहीं हो पाई।")
+        }
     }
 
     private fun say(text: String) {
@@ -146,7 +219,19 @@ class MainActivity : ComponentActivity() {
                         "फोन डायलर खोल रही हूँ।"
                     }
                 }
-                // Never place a call silently: prefill the system dialer and let the user confirm.
+                // Explicit contact-call command: one unique contact match is called directly.
+                (c.startsWith("call ") || c.startsWith("kivya call ") || c.startsWith("kivya, call ") ||
+                    c.contains("कॉल करो") || c.contains("कॉल लगाओ") || c.contains("कॉल करना")) -> {
+                    val contactName = command.replace(Regex("(?i)call|kivya|किव्या|किब्बया|कॉल करो|कॉल लगाओ|कॉल करना"), "").trim().trim(',', ' ')
+                    if (contactName.isBlank()) {
+                        startActivity(Intent(Intent.ACTION_DIAL))
+                        "किसे कॉल करना है? नाम बताइए।"
+                    } else {
+                        resolveAndCallContact(contactName)
+                        "$contactName को कॉल करने की कोशिश कर रही हूँ।"
+                    }
+                }
+                // Numeric call requests continue to open the dialer for review.
                 ("कॉल" in c || "call" in c || "डायल" in c || "dial" in c) -> {
                     val number = Regex("[+0-9][0-9 ()-]{4,}[0-9]").find(command)?.value
                         ?.filter { it.isDigit() || it == '+' }
