@@ -1,5 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.CALL_PHONE" />
     <uses-permission android:name="android.permission.INTERNET" />
     <queries><intent><action android:name="android.speech.RecognitionService" /></intent></queries>
     <application android:allowBackup="true" android:label="Kivya" android:icon="@drawable/kivya_logo" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:supportsRtl="true">
