@@ -31,7 +31,7 @@ jobs:
           curl --fail --location --retry 3 --output kws-model.tar.bz2 "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/${MODEL_DIR}.tar.bz2"
           mkdir -p app/src/main/assets
           tar -xjf kws-model.tar.bz2
-          python3 -m pip install --disable-pip-version-check sherpa-onnx==2.0.1
+          python3 -m pip install --disable-pip-version-check sherpa-onnx==2.0.1 sentencepiece
           printf 'HEY KIVYA @HEY_KIVYA\n' > "${MODEL_DIR}/kivya-keywords-raw.txt"
           sherpa-onnx-cli text2token --tokens "${MODEL_DIR}/tokens.txt" --tokens-type bpe --bpe-model "${MODEL_DIR}/bpe.model" "${MODEL_DIR}/kivya-keywords-raw.txt" "${MODEL_DIR}/keywords.txt"
           mkdir -p app/src/main/assets/kivya-kws-en
