@@ -29,6 +29,7 @@ class KivyaWakeWordService : Service() {
     private var recorder: AudioRecord? = null
     private var worker: Thread? = null
     private var spotter: KeywordSpotter? = null
+    @Volatile private var lastTriggerAt = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -119,6 +120,9 @@ class KivyaWakeWordService : Service() {
                             val detected = spotter?.getResult(stream)?.keyword.orEmpty()
                             if (detected.isNotBlank()) {
                                 spotter?.reset(stream)
+                                val now = System.currentTimeMillis()
+                                if (now - lastTriggerAt < 4000L) continue
+                                lastTriggerAt = now
                                 Log.i(TAG, "Wake word detected")
                                 val launch = Intent(this, MainActivity::class.java).apply {
                                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
@@ -138,6 +142,8 @@ class KivyaWakeWordService : Service() {
                 try { stream.release() } catch (_: Exception) {}
                 try { audio.stop() } catch (_: Exception) {}
                 audio.release()
+                try { spotter?.release() } catch (_: Exception) {}
+                spotter = null
                 recorder = null
                 running = false
                 stopSelf()
@@ -150,9 +156,6 @@ class KivyaWakeWordService : Service() {
         try { recorder?.stop() } catch (_: Exception) {}
         worker?.interrupt()
         worker = null
-        try { spotter?.release() } catch (_: Exception) {}
-        spotter = null
-        recorder?.release()
         recorder = null
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
