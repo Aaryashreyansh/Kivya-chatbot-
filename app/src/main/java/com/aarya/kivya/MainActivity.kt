@@ -429,11 +429,16 @@ private fun KivyaHome(
                     KivyaMark(Modifier.size(54.dp))
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("KIVYA", color = Color.White, fontSize = 25.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
-                        Text("YOUR PERSONAL AI COMPANION", color = Aqua, fontSize = 9.sp, letterSpacing = 1.5.sp)
+                        Text("KIVYA", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
+                        Text("YOUR PERSONAL AI ASSISTANT", color = Aqua, fontSize = 9.sp, letterSpacing = 1.35.sp)
+                        Text("VOICE • INTELLIGENCE • ACTION", color = Muted, fontSize = 8.sp, letterSpacing = 1.1.sp, modifier = Modifier.padding(top = 3.dp))
                     }
-                    Surface(color = Aqua.copy(alpha = .12f), shape = CircleShape) {
-                        Text("● READY", color = Aqua, fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 11.dp, vertical = 8.dp))
+                    Surface(color = Color(0xFF182C43), shape = CircleShape, border = androidx.compose.foundation.BorderStroke(1.dp, Aqua.copy(alpha = .28f))) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                            Box(Modifier.size(6.dp).background(Aqua, CircleShape))
+                            Spacer(Modifier.width(6.dp))
+                            Text("AI", color = Aqua, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+                        }
                     }
                 }
 
@@ -447,7 +452,7 @@ private fun KivyaHome(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
                         VoiceOrb(listening)
                         Text(if (listening) "मैं सुन रही हूँ..." else "नमस्ते, मैं Kivya हूँ", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                        Text(if (listening) "अपनी बात पूरी करें" else "आपकी आवाज़, आपके commands", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                        Text(if (listening) "अपनी बात पूरी करें" else "आपकी अपनी AI साथी", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                         Text(response, color = Color(0xFFD5E1F2), fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp), lineHeight = 19.sp)
                     }
                 }
@@ -459,7 +464,7 @@ private fun KivyaHome(
                 }
 
                 Spacer(Modifier.height(16.dp))
-                Text("QUICK ACTIONS", color = Aqua, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
+                Text("SMART CONTROLS", color = Aqua, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
                 Spacer(Modifier.height(9.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     QuickAction("Wi-Fi", Icons.Default.Wifi, Modifier.weight(1f)) { process("Wi-Fi खोलो") }
@@ -468,7 +473,7 @@ private fun KivyaHome(
                 }
 
                 Spacer(Modifier.height(16.dp))
-                Text("ASK KIVYA", color = Aqua, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
+                Text("TALK TO YOUR AI", color = Aqua, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
                 Spacer(Modifier.height(8.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
@@ -479,7 +484,7 @@ private fun KivyaHome(
                     OutlinedTextField(
                         value = prompt, onValueChange = { prompt = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Kivya, YouTube खोलो...", color = Muted, fontSize = 13.sp) },
+                        placeholder = { Text("कुछ भी पूछें या command दें...", color = Muted, fontSize = 13.sp) },
                         singleLine = true, shape = RoundedCornerShape(16.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
@@ -496,9 +501,9 @@ private fun KivyaHome(
                 Spacer(Modifier.height(8.dp))
                 Spacer(Modifier.height(14.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("RECENT ACTIVITY", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
+                    Text("CONVERSATION", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                     Spacer(Modifier.weight(1f))
-                    Text("ON-DEVICE COMMANDS", color = Aqua.copy(alpha = .75f), fontSize = 9.sp)
+                    Text("LIVE SESSION", color = Aqua.copy(alpha = .75f), fontSize = 9.sp)
                 }
                 Column(
                     Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -536,12 +541,18 @@ private fun KivyaHome(
 private fun KivyaMark(modifier: Modifier = Modifier) {
     Box(modifier.background(Brush.linearGradient(listOf(Aqua.copy(alpha = .2f), Blue.copy(alpha = .2f))), RoundedCornerShape(18.dp))
         .border(1.dp, Aqua.copy(alpha = .35f), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize().padding(8.dp)) {
+        Canvas(Modifier.fillMaxSize().padding(7.dp)) {
             val center = Offset(size.width / 2, size.height / 2)
-            drawCircle(Aqua, radius = size.minDimension * .34f, center = center, style = Stroke(width = 2.5.dp.toPx()))
-            drawCircle(Blue, radius = size.minDimension * .18f, center = center)
-            drawCircle(Color.White, radius = size.minDimension * .07f, center = center)
-            drawArc(Aqua, 210f, 120f, false, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round))
+            val r = size.minDimension * .39f
+            drawCircle(Aqua.copy(alpha = .16f), r, center)
+            drawCircle(Brush.sweepGradient(listOf(Aqua, Blue, Color(0xFFB56BFF), Aqua)), r, center, style = Stroke(width = 2.6.dp.toPx()))
+            drawArc(Blue, 205f, 125f, false, topLeft = Offset(center.x-r*.72f, center.y-r*.72f),
+                size = androidx.compose.ui.geometry.Size(r*1.44f, r*1.44f), style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
+            val p = size.minDimension * .22f
+            drawLine(Color.White, Offset(center.x-p*.65f, center.y-p), Offset(center.x-p*.65f, center.y+p), 3.dp.toPx(), cap = StrokeCap.Round)
+            drawLine(Aqua, Offset(center.x-p*.65f, center.y), Offset(center.x+p*.65f, center.y-p), 3.dp.toPx(), cap = StrokeCap.Round)
+            drawLine(Blue, Offset(center.x-p*.65f, center.y), Offset(center.x+p*.65f, center.y+p), 3.dp.toPx(), cap = StrokeCap.Round)
+            drawCircle(Color.White, 2.2.dp.toPx(), Offset(center.x+r*.76f, center.y-r*.2f))
         }
     }
 }
