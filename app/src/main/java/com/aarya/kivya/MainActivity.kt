@@ -60,18 +60,18 @@ class MainActivity : ComponentActivity() {
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "kivya-reply")
     }
 
-    private fun startListening(onResult: (String) -> Unit, onError: (String) -> Unit) {
-        val engine = speech ?: run { onError("इस फोन पर speech recognition उपलब्ध नहीं है।"); return }
+    private fun startListening(onResult: (String) -> Unit, onFailure: (String) -> Unit) {
+        val engine = speech ?: run { onFailure("इस फोन पर speech recognition उपलब्ध नहीं है।"); return }
         engine.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {}
             override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
-            override fun onError(error: Int) { onError("आवाज़ साफ़ नहीं मिली। फिर कोशिश करो।") }
+            override fun onError(error: Int) { onFailure("आवाज़ साफ़ नहीं मिली। फिर कोशिश करो।") }
             override fun onResults(results: Bundle?) {
                 val words = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                if (words.isNullOrBlank()) onError("कुछ सुनाई नहीं दिया।") else onResult(words)
+                if (words.isNullOrBlank()) onFailure("कुछ सुनाई नहीं दिया।") else onResult(words)
             }
             override fun onPartialResults(partialResults: Bundle?) {}
             override fun onEvent(eventType: Int, params: Bundle?) {}
