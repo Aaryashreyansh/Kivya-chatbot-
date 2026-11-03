@@ -228,6 +228,23 @@ class MainActivity : ComponentActivity() {
         val c = command.lowercase(Locale.ROOT)
         return try {
             when {
+                // Prepare a message in the Android share sheet; the user chooses WhatsApp or SMS and confirms sending there.
+                ("मैसेज भेजो" in c || "मैसेज भेजना" in c || "message " in c && ("send" in c || "bhejo" in c) || "whatsapp पर" in c && "भेजो" in c || "sms" in c && "भेजो" in c) -> {
+                    val body = command.substringAfter(":", "").trim().ifBlank {
+                        command.replace(Regex("(?i)hey\\s+kivya|kivya|whatsapp|sms|message|send|bhejo|please|को|पर|मैसेज|मैसेज भेजो|भेजो|भेजना"), " ")
+                            .replace(Regex("\\s+"), " ").trim(' ', ',', '।')
+                    }
+                    if (body.isBlank()) {
+                        "कौन-सा मैसेज भेजना है? ‘मैसेज:’ लिखकर मैसेज बताइए।"
+                    } else {
+                        val smsIntent = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:")).putExtra("sms_body", body)
+                        val shareIntent = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, body)
+                        val chooser = Intent.createChooser(shareIntent, "WhatsApp या अन्य ऐप से मैसेज भेजें")
+                        chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, arrayOf(smsIntent))
+                        startActivity(chooser)
+                        "मैसेज तैयार है। WhatsApp या SMS चुनें, प्राप्तकर्ता चुनें और भेजने से पहले जाँच लें।"
+                    }
+                }
                 // Open the system Phone app so the user can review recent calls and call history.
                 "कॉल हिस्ट्री" in c || "कॉल लॉग" in c || "recent calls" in c || "call history" in c || "call log" in c -> {
                     val phoneIntent = Intent(Intent.ACTION_MAIN).addCategory("android.intent.category.APP_DIALER")
@@ -450,7 +467,8 @@ private fun KivyaHome(
             "call history", "कॉल हिस्ट्री", "कॉल लॉग", "recent calls",
             "खोजो", "ढूंढो", "सर्च", "search", "समय", "टाइम", "time",
             "open ", "launch ", "start ", "खोलो", "खोलना", "ओपन करो", "चालू करो",
-            "music", "म्यूजिक", "म्यूज़िक", "गाना", "गाने", "play "
+            "music", "म्यूजिक", "म्यूज़िक", "गाना", "गाने", "play ",
+            "मैसेज भेजो", "मैसेज भेजना", "message ", "whatsapp पर", "sms"
         ).any { normalized.contains(it) }
         if (isDeviceCommand) {
             val answer = phoneAction(text)
