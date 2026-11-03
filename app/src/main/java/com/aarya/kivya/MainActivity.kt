@@ -73,6 +73,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import androidx.compose.runtime.DisposableEffect
 
 private val Deep = Color(0xFF070B16)
 private val Panel = Color(0xFF111B2D)
@@ -513,6 +514,13 @@ private fun KivyaHome(
     var response by remember { mutableStateOf("हेलो आर्या, स्वागत है। मैं KIVYA हूँ। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?") }
     var listening by remember { mutableStateOf(false) }
     var wakeEnabled by remember { mutableStateOf(false) }
+    val offlineChat = remember { KivyaOfflineChat(context.applicationContext) }
+    var offlineReady by remember { mutableStateOf(offlineChat.isModelDownloaded()) }
+    var offlineBusy by remember { mutableStateOf(false) }
+    var offlineProgress by remember { mutableIntStateOf(0) }
+    var offlineStatus by remember { mutableStateOf("Offline AI अभी डाउनलोड नहीं है।") }
+    var offlineEnabled by remember { mutableStateOf(false) }
+    DisposableEffect(offlineChat) { onDispose { offlineChat.close() } }
     val wakeMicPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             try {
@@ -674,9 +682,13 @@ private fun KivyaHome(
             saveMemory()
             speak(answer)
         } else {
-            response = "KIVYA जवाब तैयार कर रही है..."
+            response = if (offlineEnabled) "KIVYA Offline AI जवाब तैयार कर रही है..." else "KIVYA जवाब तैयार कर रही है..."
             scope.launch {
-                val answer = withContext(Dispatchers.IO) {
+                val answer = if (offlineEnabled) {
+                    try { offlineChat.reply(text) } catch (e: Exception) {
+                        "Offline AI में समस्या हुई: ${e.message ?: "मॉडल लोड नहीं हुआ।"}"
+                    }
+                } else withContext(Dispatchers.IO) {
                     try {
                         val connection = (URL("https://kivya-gemini-api.onrender.com/v1/chat").openConnection() as HttpURLConnection).apply {
                             requestMethod = "POST"
@@ -707,7 +719,13 @@ private fun KivyaHome(
                             connection.disconnect()
                         }
                     } catch (_: Exception) {
-                        "KIVYA server से संपर्क नहीं हो पाया। इंटरनेट जाँचकर फिर कोशिश करें।"
+                        if (offlineChat.isReady()) {
+                            try { offlineChat.reply(text) } catch (_: Exception) {
+                                "Server और Offline AI दोनों अभी उपलब्ध नहीं हैं।"
+                            }
+                        } else {
+                            "Server उपलब्ध नहीं है। Offline AI डाउनलोड करने के लिए नीचे बटन दबाएँ।"
+                        }
                     }
                 }
                 response = answer
@@ -800,7 +818,37 @@ private fun KivyaHome(
                 ) {
                     Text(if (wakeEnabled) "STOP WAKE WORD" else "HEY KIVYA", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                 }
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(12.dp))
+                Surface(color = Panel, shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Aqua.copy(alpha = .25f)),
+                    modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("OFFLINE AI · QWEN3 0.6B INT4", color = Aqua, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text(offlineStatus, color = Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
+                        if (offlineBusy) LinearProgressIndicator(progress = { offlineProgress / 100f }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                            Button(enabled = !offlineBusy, modifier = Modifier.weight(1f), onClick = {
+                                offlineBusy = true
+                                scope.launch {
+                                    try {
+                                        offlineChat.installAndLoad { p -> offlineProgress = p; offlineStatus = "डाउनलोड: $p%" }
+                                        offlineReady = true
+                                        offlineEnabled = true
+                                        offlineStatus = "तैयार। अब चैट बिना इंटरनेट चलेगी।"
+                                        response = offlineStatus
+                                    } catch (e: Exception) {
+                                        offlineStatus = "इंस्टॉल नहीं हुआ: ${e.message ?: "फिर कोशिश करें"}"
+                                    } finally { offlineBusy = false }
+                                }
+                            }) { Text(if (offlineReady) "LOAD OFFLINE AI" else "DOWNLOAD · 347 MB", fontSize = 10.sp) }
+                            OutlinedButton(enabled = offlineReady && !offlineBusy, modifier = Modifier.weight(1f),
+                                onClick = { offlineEnabled = !offlineEnabled; offlineStatus = if (offlineEnabled) "Offline Mode चालू" else "Online Mode चालू" }) {
+                                Text(if (offlineEnabled) "OFFLINE ON" else "OFFLINE OFF", fontSize = 10.sp)
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(14.dp))
                 Spacer(Modifier.height(10.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
