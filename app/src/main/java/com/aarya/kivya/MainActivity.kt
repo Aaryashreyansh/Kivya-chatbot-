@@ -9,6 +9,8 @@ import android.os.Bundle
 import android.provider.Settings
 import android.provider.AlarmClock
 import android.provider.CalendarContract
+import android.telecom.TelecomManager
+import android.app.role.RoleManager
 import android.provider.MediaStore
 import android.app.SearchManager
 import android.speech.RecognitionListener
@@ -260,6 +262,24 @@ class MainActivity : ComponentActivity() {
         val c = command.lowercase(Locale.ROOT)
         return try {
             when {
+                "कॉल उठाओ" in c || "कॉल रिसीव" in c || "answer call" in c || "pick up call" in c -> {
+                    if (KivyaCallController.answerIncomingCall()) "आने वाली कॉल रिसीव कर ली।"
+                    else "अभी कोई incoming call उपलब्ध नहीं है। KIVYA को Default Phone App बनाना जरूरी है।"
+                }
+                "कॉल काटो" in c || "कॉल रिजेक्ट" in c || "reject call" in c || "decline call" in c -> {
+                    if (KivyaCallController.rejectIncomingCall()) "कॉल reject कर दी।"
+                    else "अभी कोई incoming call उपलब्ध नहीं है।"
+                }
+                "default dialer" in c || "डिफॉल्ट डायलर" in c || "फोन ऐप बनाओ" in c -> {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        val roleManager = getSystemService(RoleManager::class.java)
+                        if (roleManager.isRoleAvailable(RoleManager.ROLE_DIALER) && !roleManager.isRoleHeld(RoleManager.ROLE_DIALER)) {
+                            startActivity(roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER))
+                            "KIVYA को Default Phone App बनाने की अनुमति चुनें।"
+                        } else if (roleManager.isRoleHeld(RoleManager.ROLE_DIALER)) "KIVYA पहले से Default Phone App है।"
+                        else "इस Android version पर Dialer role उपलब्ध नहीं है।"
+                    } else "इस Android version पर Default Dialer role request उपलब्ध नहीं है।"
+                }
                 // Resolve a named contact when permission is already granted; never send without user confirmation.
                 ("मैसेज भेजो" in c || "मैसेज भेजना" in c || "message " in c && ("send" in c || "bhejo" in c) || "whatsapp पर" in c && "भेजो" in c || "sms" in c && "भेजो" in c) -> {
                     val parts = command.split(":", limit = 2)
