@@ -109,6 +109,29 @@ class MainActivity : ComponentActivity() {
         val c = command.lowercase(Locale.ROOT)
         return try {
             when {
+                // Open the system Phone app so the user can review recent calls and call history.
+                "कॉल हिस्ट्री" in c || "कॉल लॉग" in c || "recent calls" in c || "call history" in c || "call log" in c -> {
+                    val phoneIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_APP_PHONE)
+                    if (phoneIntent.resolveActivity(packageManager) != null) {
+                        startActivity(phoneIntent)
+                        "फोन ऐप में Recent Calls खोल रही हूँ।"
+                    } else {
+                        startActivity(Intent(Intent.ACTION_DIAL))
+                        "फोन डायलर खोल रही हूँ।"
+                    }
+                }
+                // Never place a call silently: prefill the system dialer and let the user confirm.
+                ("कॉल" in c || "call" in c || "डायल" in c || "dial" in c) -> {
+                    val number = Regex("[+0-9][0-9 ()-]{4,}[0-9]").find(command)?.value
+                        ?.filter { it.isDigit() || it == '+' }
+                    if (number.isNullOrBlank()) {
+                        startActivity(Intent(Intent.ACTION_DIAL))
+                        "डायलर खोल रही हूँ। नंबर डालकर कॉल बटन दबाएँ।"
+                    } else {
+                        startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number")))
+                        "$number डायलर में तैयार है। कॉल करने के लिए फोन ऐप में Call दबाएँ।"
+                    }
+                }
                 "सेटिंग" in c || "settings" in c -> { startActivity(Intent(Settings.ACTION_SETTINGS)); "सेटिंग्स खोल रही हूँ।" }
                 "वाईफाई" in c || "wifi" in c || "wi-fi" in c -> { startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)); "वाई-फाई सेटिंग्स खोल रही हूँ।" }
                 "ब्लूटूथ" in c || "bluetooth" in c -> { startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)); "ब्लूटूथ सेटिंग्स खोल रही हूँ।" }
