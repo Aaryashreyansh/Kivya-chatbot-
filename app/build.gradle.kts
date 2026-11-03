@@ -31,5 +31,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    // Sherpa-ONNX Android runtime is downloaded and checksum-verified by CI into app/libs.
+    implementation(files("libs/sherpa-onnx-2.0.1.aar"))
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
