@@ -65,6 +65,7 @@ import java.util.Locale
 import java.net.HttpURLConnection
 import java.net.URL
 import org.json.JSONObject
+import org.json.JSONArray
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -401,7 +402,13 @@ private fun KivyaHome(
                             setRequestProperty("Content-Type", "application/json; charset=utf-8")
                         }
                         try {
-                            val body = JSONObject().put("message", text).put("language", "auto").toString()
+                            val history = JSONArray()
+                            chat.takeLast(12).forEach { line -> history.put(line.take(1000)) }
+                            val body = JSONObject()
+                                .put("message", text)
+                                .put("language", "auto")
+                                .put("history", history)
+                                .toString()
                             connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
                             val status = connection.responseCode
                             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
