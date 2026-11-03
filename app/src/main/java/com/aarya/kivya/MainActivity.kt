@@ -547,7 +547,7 @@ private fun KivyaHome(
                     response = "‘$name’ नाम का routine नहीं मिला। ‘मेरे रूटीन दिखाओ’ बोलें।"
                 } else {
                     val results = steps.map { step -> phoneAction(step) }
-                    response = "‘$name’ routine पूरा हुआ।\\n" + results.joinToString("\\n")
+                    response = "‘$name’ routine पूरा हुआ।\n" + results.joinToString("\n")
                 }
                 chat.add("KIVYA: $response")
                 saveMemory()
