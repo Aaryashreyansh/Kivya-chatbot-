@@ -1,8 +1,10 @@
-import hmac
+import threading
+import time
+from collections import defaultdict, deque
 import os
 from typing import Literal
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from google import genai
 from pydantic import BaseModel, Field
@@ -10,11 +12,14 @@ from pydantic import BaseModel, Field
 APP_NAME = "Kivya API"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
-KIVYA_API_TOKEN = os.getenv("KIVYA_API_TOKEN", "")
 MAX_OUTPUT_TOKENS = min(max(int(os.getenv("MAX_OUTPUT_TOKENS", "1200")), 64), 4096)
 GEMINI_TIMEOUT_SECONDS = min(max(float(os.getenv("GEMINI_TIMEOUT_SECONDS", "45")), 5), 90)
 
 app = FastAPI(title=APP_NAME, version="0.3.0")
+
+_RATE_LOCK = threading.Lock()
+_REQUESTS: dict[str, deque[float]] = defaultdict(deque)
+RATE_LIMIT_PER_MINUTE = 8
 
 allowed_origins = [
     origin.strip()
@@ -41,12 +46,15 @@ class ChatResponse(BaseModel):
     model: str
 
 
-def require_auth(authorization: str | None) -> None:
-    if not KIVYA_API_TOKEN:
-        raise HTTPException(status_code=503, detail="API authentication is not configured")
-    expected = f"Bearer {KIVYA_API_TOKEN}"
-    if not authorization or not hmac.compare_digest(authorization, expected):
-        raise HTTPException(status_code=401, detail="Unauthorized")
+def enforce_rate_limit(client_ip: str) -> None:
+    now = time.monotonic()
+    with _RATE_LOCK:
+        bucket = _REQUESTS[client_ip]
+        while bucket and now - bucket[0] >= 60:
+            bucket.popleft()
+        if len(bucket) >= RATE_LIMIT_PER_MINUTE:
+            raise HTTPException(status_code=429, detail="KIVYA request limit reached. Please wait a minute and try again.")
+        bucket.append(now)
 
 
 @app.get("/health")
@@ -61,8 +69,8 @@ def health():
 
 
 @app.post("/v1/chat", response_model=ChatResponse)
-def chat(payload: ChatRequest, authorization: str | None = Header(default=None)):
-    require_auth(authorization)
+def chat(payload: ChatRequest, request: Request):
+    enforce_rate_limit(request.client.host if request.client else "unknown")
 
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=503, detail="Gemini API is not configured")
