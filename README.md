@@ -10,6 +10,10 @@ Open this repository in Android Studio (JDK 17, Android SDK 35) or run:
 
 The GitHub Actions workflow builds a debug APK on every push to main.
 
+## Offline wake-word roadmap
+
+Kivya is preparing an on-device wake-word path using ONNX Runtime for Android. The implementation will be developed in two tracks: (1) validate an existing Hindi demo keyword model on-device, then (2) train/evaluate a dedicated “Hey Kivya” model and compare false-trigger and missed-trigger rates. The app does not yet listen for a wake word in the background. Model assets and inference/audio-capture integration are intentionally not included until their provenance, model format, licensing, and Android build are verified. Background microphone use must be user-enabled, visible through an ongoing notification, and comply with Android foreground-service restrictions.
+
 ## Current scope
 The first milestone includes a Compose UI, Hindi speech recognition, Android TextToSpeech, permission-aware microphone access, and a small allow-listed phone command router.
 
