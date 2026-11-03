@@ -19,7 +19,7 @@ app = FastAPI(title=APP_NAME, version="0.3.0")
 
 _RATE_LOCK = threading.Lock()
 _REQUESTS: dict[str, deque[float]] = defaultdict(deque)
-RATE_LIMIT_PER_MINUTE = 8
+RATE_LIMIT_PER_MINUTE = 30
 
 allowed_origins = [
     origin.strip()
@@ -70,7 +70,11 @@ def health():
 
 @app.post("/v1/chat", response_model=ChatResponse)
 def chat(payload: ChatRequest, request: Request):
-    enforce_rate_limit(request.client.host if request.client else "unknown")
+    # Render runs behind a proxy. Prefer the first forwarded client IP so
+    # unrelated mobile users are not all throttled as one shared proxy address.
+    forwarded_for = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+    client_ip = forwarded_for or (request.client.host if request.client else "unknown")
+    enforce_rate_limit(client_ip)
 
     if not GEMINI_API_KEY:
         raise HTTPException(status_code=503, detail="Gemini API is not configured")
