@@ -90,7 +90,17 @@ class MainActivity : ComponentActivity() {
             else say("Phone permission नहीं मिली। कॉल नहीं की गई।")
         }
         tts = TextToSpeech(this) { status ->
-            if (status == TextToSpeech.SUCCESS) tts?.language = Locale("hi", "IN")
+            if (status == TextToSpeech.SUCCESS) {
+                tts?.language = Locale("hi", "IN")
+                tts?.setSpeechRate(0.96f)
+                tts?.setPitch(1.04f)
+                tts?.speak(
+                    "हेलो आर्या, स्वागत है। मैं KIVYA हूँ। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?",
+                    TextToSpeech.QUEUE_FLUSH,
+                    null,
+                    "kivya-welcome"
+                )
+            }
         }
         if (SpeechRecognizer.isRecognitionAvailable(this)) speech = SpeechRecognizer.createSpeechRecognizer(this)
         setContent { KivyaHome(::startListening, ::say, ::phoneAction) }
@@ -334,9 +344,9 @@ private fun KivyaHome(
     val context = LocalContext.current
     var mode by remember { mutableStateOf("Phone") }
     var prompt by remember { mutableStateOf("") }
-    var response by remember { mutableStateOf("नमस्ते! मैं Kivya हूँ। बताओ, क्या करना है?") }
+    var response by remember { mutableStateOf("हेलो आर्या, स्वागत है। मैं KIVYA हूँ। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?") }
     var listening by remember { mutableStateOf(false) }
-    val chat = remember { mutableStateListOf("Kivya: मैं तैयार हूँ। बोलकर या लिखकर command दो।") }
+    val chat = remember { mutableStateListOf("KIVYA: हेलो आर्या, स्वागत है। मैं आपकी मदद के लिए तैयार हूँ।") }
 
     fun process(text: String) {
         prompt = text
