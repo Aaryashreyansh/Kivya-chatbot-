@@ -784,25 +784,43 @@ private fun KivyaHome(
                 }
 
                 Spacer(Modifier.height(12.dp))
-                Button(
-                    onClick = {
-                        if (wakeEnabled) {
-                            context.startService(Intent(context, KivyaWakeWordService::class.java).setAction(KivyaWakeWordService.ACTION_STOP))
-                            wakeEnabled = false
-                            response = "Hey KIVYA wake-word listening बंद कर दी।"
-                        } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                            wakeMicPermission.launch(Manifest.permission.RECORD_AUDIO)
-                        } else {
-                            wakeMicPermission.launch(Manifest.permission.RECORD_AUDIO)
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(48.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = if (wakeEnabled) Color(0xFFB45B72) else Color(0xFF203B55))
-                ) {
-                    Text(if (wakeEnabled) "STOP HEY KIVYA LISTENING" else "ENABLE HEY KIVYA", color = Color.White, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = {
+                            if (wakeEnabled) {
+                                context.startService(Intent(context, KivyaWakeWordService::class.java).setAction(KivyaWakeWordService.ACTION_STOP))
+                                wakeEnabled = false
+                                response = "Hey KIVYA wake-word listening बंद कर दी।"
+                            } else {
+                                wakeMicPermission.launch(Manifest.permission.RECORD_AUDIO)
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(50.dp),
+                        shape = RoundedCornerShape(15.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = if (wakeEnabled) Color(0xFFB45B72) else Color(0xFF203B55))
+                    ) {
+                        Text(if (wakeEnabled) "STOP WAKE WORD" else "HEY KIVYA", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+                    Button(
+                        onClick = {
+                            val roleManager = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q)
+                                context.getSystemService(android.app.role.RoleManager::class.java) else null
+                            if (roleManager != null && roleManager.isRoleAvailable(android.app.role.RoleManager.ROLE_DIALER) &&
+                                !roleManager.isRoleHeld(android.app.role.RoleManager.ROLE_DIALER)) {
+                                val intent = roleManager.createRequestRoleIntent(android.app.role.RoleManager.ROLE_DIALER)
+                                (context as? android.app.Activity)?.startActivityForResult(intent, 902)
+                                response = "एक बार KIVYA को Default Phone App चुनें। फिर इसी बटन से incoming call उठेगी।"
+                            } else {
+                                process("कॉल उठाओ")
+                            }
+                        },
+                        modifier = Modifier.weight(1f).height(50.dp),
+                        shape = RoundedCornerShape(15.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF164E58))
+                    ) {
+                        Text("CALL PICKUP", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
                 }
-                Spacer(Modifier.height(8.dp))
                 Spacer(Modifier.height(16.dp))
                 Spacer(Modifier.height(10.dp))
                 Row(
