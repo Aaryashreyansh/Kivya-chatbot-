@@ -32,6 +32,7 @@ jobs:
       - name: Download latest beta APK for manual run
         if: github.event_name == 'workflow_dispatch'
         run: |
+          mkdir -p artifacts
           gh release download beta --pattern 'app-debug.apk' --dir artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
