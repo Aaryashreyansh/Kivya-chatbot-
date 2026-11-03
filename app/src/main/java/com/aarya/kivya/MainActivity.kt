@@ -321,10 +321,50 @@ class MainActivity : ComponentActivity() {
                 "क्रोम" in c || "chrome" in c -> launchApp("com.android.chrome", "Chrome", "https://www.google.com")
                 "गूगल" in c || "google" in c || "सर्च" in c -> openWeb("https://www.google.com", "Google खोल रही हूँ।")
                 "मैप" in c || "नक्शा" in c || "maps" in c -> openWeb("https://maps.google.com", "Maps खोल रही हूँ।")
+                isExplicitOpenCommand(c) -> openInstalledAppByVoice(command)
                 "समय" in c || "टाइम" in c || "time" in c -> "अभी समय ${SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())} है।"
                 else -> "यह command अभी उपलब्ध नहीं है। Settings, Wi-Fi, Bluetooth, YouTube, WhatsApp, Instagram, Camera, Phone, Chrome या Maps कहो।"
             }
         } catch (_: Exception) { "यह ऐप इस फोन में नहीं मिला या खुल नहीं पाया।" }
+    }
+
+    private fun isExplicitOpenCommand(command: String): Boolean {
+        return Regex("^(hey\\s+)?kivya[, ]*(open|launch|start)\\s+.+", RegexOption.IGNORE_CASE).containsMatchIn(command.trim()) ||
+            Regex("^(open|launch|start)\\s+.+", RegexOption.IGNORE_CASE).containsMatchIn(command.trim()) ||
+            Regex("^(.*\\s)?(खोलो|खोलना|ओपन करो|चालू करो)\\s*.*").containsMatchIn(command.trim())
+    }
+
+    private fun openInstalledAppByVoice(rawCommand: String): String {
+        val requested = rawCommand.lowercase(Locale.ROOT)
+            .replace(Regex("(?i)^hey\\s+kivya[, ]*|^kivya[, ]*|^(open|launch|start)\\s+"), "")
+            .replace(Regex("(?i)\\s*(app|application)\\s*$"), "")
+            .replace(Regex("\\s*(खोलो|खोलना|ओपन करो|चालू करो)$"), "")
+            .trim()
+        if (requested.isBlank()) return "कौन-सा ऐप खोलना है? उसका नाम बताइए।"
+
+        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val matches = packageManager.queryIntentActivities(launcherIntent, 0)
+            .mapNotNull { info ->
+                val label = info.loadLabel(packageManager)?.toString()?.trim().orEmpty()
+                if (label.isBlank()) null else Triple(label, info.activityInfo.packageName, info.activityInfo.name)
+            }
+            .filter { it.first.equals(requested, ignoreCase = true) ||
+                it.first.contains(requested, ignoreCase = true) ||
+                requested.contains(it.first, ignoreCase = true) }
+            .distinctBy { it.second }
+
+        return when {
+            matches.isEmpty() -> "‘$requested’ नाम का कोई इंस्टॉल ऐप नहीं मिला। ऐप का सही नाम बोलकर फिर कोशिश करें।"
+            matches.size > 1 -> "‘$requested’ से मिलते-जुलते कई ऐप मिले: ${matches.take(3).joinToString { it.first }}। पूरा ऐप नाम बताइए।"
+            else -> {
+                val (label, packageName, activityName) = matches.first()
+                val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+                    .setClassName(packageName, activityName)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                startActivity(intent)
+                "$label खोल रही हूँ।"
+            }
+        }
     }
 
     private fun launchApp(packageName: String, label: String, fallbackUrl: String? = null): String {
