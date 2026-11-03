@@ -430,8 +430,7 @@ private fun KivyaHome(
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text("KIVYA", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
-                        Text("YOUR PERSONAL AI ASSISTANT", color = Aqua, fontSize = 9.sp, letterSpacing = 1.35.sp)
-                        Text("VOICE • INTELLIGENCE • ACTION", color = Muted, fontSize = 8.sp, letterSpacing = 1.1.sp, modifier = Modifier.padding(top = 3.dp))
+                        Text("AI ASSISTANT", color = Aqua, fontSize = 9.sp, letterSpacing = 1.35.sp)
                     }
                     Surface(color = Color(0xFF182C43), shape = CircleShape, border = androidx.compose.foundation.BorderStroke(1.dp, Aqua.copy(alpha = .28f))) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
@@ -452,20 +451,12 @@ private fun KivyaHome(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
                         VoiceOrb(listening)
                         Text(if (listening) "मैं सुन रही हूँ..." else "नमस्ते, मैं Kivya हूँ", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                        Text(if (listening) "अपनी बात पूरी करें" else "आपकी अपनी AI साथी", color = Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
                         Text(response, color = Color(0xFFD5E1F2), fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp), lineHeight = 19.sp)
                     }
                 }
 
                 Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                    ModeCard("PHONE", "Device commands", mode == "Phone", Modifier.weight(1f)) { mode = "Phone" }
-                    ModeCard("AI STUDIO", "AI tools & coding", mode == "AI", Modifier.weight(1f)) { mode = "AI" }
-                }
-
-                Spacer(Modifier.height(16.dp))
-                Text("SMART CONTROLS", color = Aqua, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
-                Spacer(Modifier.height(9.dp))
+                Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     QuickAction("Wi-Fi", Icons.Default.Wifi, Modifier.weight(1f)) { process("Wi-Fi खोलो") }
                     QuickAction("Bluetooth", Icons.Default.Bluetooth, Modifier.weight(1f)) { process("Bluetooth खोलो") }
@@ -473,8 +464,7 @@ private fun KivyaHome(
                 }
 
                 Spacer(Modifier.height(16.dp))
-                Text("TALK TO YOUR AI", color = Aqua, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.8.sp)
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(10.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(20.dp))
                         .background(Panel).border(1.dp, Color.White.copy(alpha = .09f), RoundedCornerShape(20.dp))
@@ -484,7 +474,7 @@ private fun KivyaHome(
                     OutlinedTextField(
                         value = prompt, onValueChange = { prompt = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("कुछ भी पूछें या command दें...", color = Muted, fontSize = 13.sp) },
+                        placeholder = { Text("Message KIVYA...", color = Muted, fontSize = 13.sp) },
                         singleLine = true, shape = RoundedCornerShape(16.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
@@ -515,7 +505,6 @@ private fun KivyaHome(
                         }
                     }
                 }
-                Text("Voice recognition needs microphone permission and your phone's speech service.", color = Muted.copy(alpha = .75f), fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp))
             }
             Button(
                 onClick = {
