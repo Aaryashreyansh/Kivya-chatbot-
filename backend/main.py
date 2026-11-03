@@ -39,6 +39,7 @@ if allowed_origins:
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=6000)
     language: Literal["hi", "en", "auto"] = "auto"
+    history: list[str] = Field(default_factory=list, max_length=12)
 
 
 class ChatResponse(BaseModel):
@@ -99,7 +100,12 @@ def chat(payload: ChatRequest, request: Request):
         client = genai.Client(api_key=GEMINI_API_KEY)
         interaction = client.interactions.create(
             model=GEMINI_MODEL,
-            input=payload.message,
+            input=(
+            "Recent conversation context (may be incomplete):\\n"
+            + "\\n".join(item[:1000] for item in payload.history[-12:])
+            + "\\n\\nCurrent user message:\\n"
+            + payload.message
+        ),
             system_instruction=system_instruction,
             tools=[{"type": "google_search"}],
             generation_config={
