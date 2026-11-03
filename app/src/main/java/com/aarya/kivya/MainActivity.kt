@@ -60,6 +60,12 @@ import androidx.core.content.ContextCompat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.net.HttpURLConnection
+import java.net.URL
+import org.json.JSONObject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val Deep = Color(0xFF070B16)
 private val Panel = Color(0xFF111B2D)
@@ -348,14 +354,49 @@ private fun KivyaHome(
     var listening by remember { mutableStateOf(false) }
     val chat = remember { mutableStateListOf("KIVYA: हेलो आर्या, स्वागत है। मैं आपकी मदद के लिए तैयार हूँ।") }
 
+    val scope = rememberCoroutineScope()
+
     fun process(text: String) {
         prompt = text
-        val answer = if (mode == "Phone") phoneAction(text) else
-            "AI Tools mode अभी backend से connect नहीं है। Cloud AI और developer tools अगली सुरक्षित integration में जुड़ेंगे।"
-        response = answer
         chat.add("तुम: $text")
-        chat.add("Kivya: $answer")
-        speak(answer)
+        if (mode == "Phone") {
+            val answer = phoneAction(text)
+            response = answer
+            chat.add("KIVYA: $answer")
+            speak(answer)
+        } else {
+            response = "KIVYA जवाब तैयार कर रही है..."
+            scope.launch {
+                val answer = withContext(Dispatchers.IO) {
+                    try {
+                        val connection = (URL("https://kivya-gemini-api.onrender.com/v1/chat").openConnection() as HttpURLConnection).apply {
+                            requestMethod = "POST"
+                            connectTimeout = 20000
+                            readTimeout = 60000
+                            doOutput = true
+                            setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                        }
+                        try {
+                            val body = JSONObject().put("message", text).put("language", "auto").toString()
+                            connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                            val status = connection.responseCode
+                            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
+                            val raw = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                            val json = JSONObject(raw.ifBlank { "{}" })
+                            if (status in 200..299) json.optString("reply").ifBlank { "Gemini से खाली जवाब मिला।" }
+                            else json.optString("detail").ifBlank { "Server error ($status). थोड़ी देर बाद कोशिश करें।" }
+                        } finally {
+                            connection.disconnect()
+                        }
+                    } catch (_: Exception) {
+                        "KIVYA server से संपर्क नहीं हो पाया। इंटरनेट जाँचकर फिर कोशिश करें।"
+                    }
+                }
+                response = answer
+                chat.add("KIVYA: $answer")
+                speak(answer)
+            }
+        }
     }
 
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
