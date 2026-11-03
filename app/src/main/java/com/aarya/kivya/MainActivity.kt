@@ -525,7 +525,7 @@ private fun KivyaHome(
             normalized in listOf("मेरी यादें दिखाओ", "यादें दिखाओ", "show my memories", "what do you remember") -> {
                 val notes = memory.loadNotes()
                 response = if (notes.isEmpty()) "अभी कोई अलग से सेव की हुई याद नहीं है।"
-                    else "मेरी सेव की हुई यादें:\\n" + notes.takeLast(10).mapIndexed { index, note -> "${index + 1}. $note" }.joinToString("\\n")
+                    else "मेरी सेव की हुई यादें:\\n" + notes.takeLast(10).mapIndexed { index, note -> "${index + 1}. $note" }.joinToString("\n")
                 chat.add("KIVYA: $response")
                 saveMemory()
                 speak(response)
@@ -581,13 +581,13 @@ private fun KivyaHome(
                         try {
                             val history = JSONArray()
                             chat.takeLast(12).forEach { line -> history.put(line.take(1000)) }
+                            memory.loadNotes().takeLast(10).forEach { note ->
+                                history.put("KIVYA saved user note: " + note.take(500))
+                            }
                             val body = JSONObject()
                                 .put("message", text)
                                 .put("language", "auto")
                                 .put("history", history)
-                                .put("saved_memory", JSONArray().apply {
-                                    memory.loadNotes().takeLast(10).forEach { put(it) }
-                                })
                                 .toString()
                             connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
                             val status = connection.responseCode
