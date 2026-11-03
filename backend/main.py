@@ -2,19 +2,19 @@ import hmac
 import os
 from typing import Literal
 
-import httpx
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from google import genai
 from pydantic import BaseModel, Field
 
 APP_NAME = "Kivya API"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
 KIVYA_API_TOKEN = os.getenv("KIVYA_API_TOKEN", "")
-MAX_OUTPUT_TOKENS = min(max(int(os.getenv("MAX_OUTPUT_TOKENS", "600")), 64), 1200)
-GEMINI_TIMEOUT_SECONDS = min(max(float(os.getenv("GEMINI_TIMEOUT_SECONDS", "25")), 5), 60)
+MAX_OUTPUT_TOKENS = min(max(int(os.getenv("MAX_OUTPUT_TOKENS", "1200")), 64), 4096)
+GEMINI_TIMEOUT_SECONDS = min(max(float(os.getenv("GEMINI_TIMEOUT_SECONDS", "45")), 5), 90)
 
-app = FastAPI(title=APP_NAME, version="0.2.0")
+app = FastAPI(title=APP_NAME, version="0.3.0")
 
 allowed_origins = [
     origin.strip()
@@ -51,7 +51,13 @@ def require_auth(authorization: str | None) -> None:
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "service": "kivya-api", "ai_provider": "google-gemini"}
+    return {
+        "status": "ok",
+        "service": "kivya-api",
+        "ai_provider": "google-gemini-interactions",
+        "model": GEMINI_MODEL,
+        "google_search": True,
+    }
 
 
 @app.post("/v1/chat", response_model=ChatResponse)
@@ -69,58 +75,29 @@ def chat(payload: ChatRequest, authorization: str | None = Header(default=None))
 
     system_instruction = (
         "You are KIVYA, a helpful, honest phone and technology assistant. "
-        "Be concise, practical, and friendly. Do not claim to control the phone "
-        "unless the Android app has actually performed the action. "
+        "Be concise, practical, and friendly. Use Google Search when current "
+        "facts, recent events, changing information, or source verification would "
+        "materially improve the answer. Distinguish verified facts from uncertainty. "
+        "Do not claim to control the phone unless the Android app has actually "
+        "performed the action. "
         + language_hint
     )
-    url = (
-        "https://generativelanguage.googleapis.com/v1beta/"
-        f"models/{GEMINI_MODEL}:generateContent"
-    )
-    body = {
-        "systemInstruction": {"parts": [{"text": system_instruction}]},
-        "contents": [{"role": "user", "parts": [{"text": payload.message}]}],
-        "generationConfig": {
-            "maxOutputTokens": MAX_OUTPUT_TOKENS,
-            "temperature": 0.4,
-            "topP": 0.9,
-        },
-    }
 
     try:
-        with httpx.Client(timeout=GEMINI_TIMEOUT_SECONDS) as client:
-            response = client.post(
-                url,
-                headers={
-                    "x-goog-api-key": GEMINI_API_KEY,
-                    "Content-Type": "application/json",
-                },
-                json=body,
-            )
-        if response.status_code == 429:
-            raise HTTPException(
-                status_code=429,
-                detail="Gemini free-tier limit reached or service is busy. Try again later.",
-            )
-        if response.status_code in (401, 403):
-            raise HTTPException(
-                status_code=503,
-                detail="Gemini API key or project access is not configured correctly.",
-            )
-        if response.status_code >= 500:
-            raise HTTPException(
-                status_code=502,
-                detail="Gemini AI is temporarily unavailable. Try again later.",
-            )
-        if response.is_error:
-            raise HTTPException(status_code=502, detail="Gemini could not process this request.")
-
-        data = response.json()
-        candidates = data.get("candidates", [])
-        parts = candidates[0].get("content", {}).get("parts", []) if candidates else []
-        reply = "\n".join(
-            part["text"] for part in parts if isinstance(part.get("text"), str)
-        ).strip()
+        client = genai.Client(api_key=GEMINI_API_KEY)
+        interaction = client.interactions.create(
+            model=GEMINI_MODEL,
+            input=payload.message,
+            system_instruction=system_instruction,
+            tools=[{"type": "google_search"}],
+            generation_config={
+                "max_output_tokens": MAX_OUTPUT_TOKENS,
+                "thinking_level": "medium",
+            },
+            # The SDK request timeout is bounded by the hosting platform as well.
+            timeout=GEMINI_TIMEOUT_SECONDS,
+        )
+        reply = (interaction.output_text or "").strip()
         if not reply:
             raise HTTPException(
                 status_code=502,
@@ -129,8 +106,20 @@ def chat(payload: ChatRequest, authorization: str | None = Header(default=None))
         return ChatResponse(reply=reply, model=GEMINI_MODEL)
     except HTTPException:
         raise
-    except (httpx.TimeoutException, httpx.RequestError, ValueError):
+    except Exception as exc:
+        # Do not expose provider responses, request headers, or credentials to clients.
+        error_name = type(exc).__name__.lower()
+        if "ratelimit" in error_name or "resourceexhausted" in error_name:
+            raise HTTPException(
+                status_code=429,
+                detail="Gemini quota reached or service is busy. Try again later.",
+            )
+        if "auth" in error_name or "permission" in error_name:
+            raise HTTPException(
+                status_code=503,
+                detail="Gemini API key or project access is not configured correctly.",
+            )
         raise HTTPException(
             status_code=502,
-            detail="Gemini AI is temporarily unreachable. Please try again.",
+            detail="Gemini AI is temporarily unavailable. Please try again.",
         )
