@@ -43,7 +43,7 @@ jobs:
           test -s app/src/main/assets/kivya-kws-en/encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx
           rm -rf "${MODEL_DIR}" kws-model.tar.bz2
       - name: Build debug and optimized test release APKs
-        run: gradle assembleDebug assembleRelease
+        run: gradle assembleDebug assembleRelease --stacktrace --info
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
