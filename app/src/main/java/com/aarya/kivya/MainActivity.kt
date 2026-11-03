@@ -6,6 +6,9 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
+import android.provider.AlarmClock
+import android.provider.CalendarContract
+import android.app.SearchManager
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
@@ -82,16 +85,31 @@ class MainActivity : ComponentActivity() {
 
     private fun startListening(onResult: (String) -> Unit, onFailure: (String) -> Unit) {
         val engine = speech ?: run { onFailure("इस फोन पर speech recognition उपलब्ध नहीं है।"); return }
+        // Cancel any stale recognition session before starting a fresh, one-shot session.
+        try { engine.cancel() } catch (_: Exception) {}
+        var finished = false
+        fun finish() {
+            if (!finished) {
+                finished = true
+                try { engine.cancel() } catch (_: Exception) {}
+            }
+        }
         engine.setRecognitionListener(object : RecognitionListener {
             override fun onReadyForSpeech(params: Bundle?) {}
             override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
-            override fun onError(error: Int) { onFailure("आवाज़ साफ़ नहीं मिली। फिर कोशिश करो।") }
+            override fun onError(error: Int) {
+                if (finished) return
+                finish()
+                onFailure("आवाज़ पहचान नहीं पाई। इंटरनेट या Hindi voice service जाँचकर फिर बोलें।")
+            }
             override fun onResults(results: Bundle?) {
+                if (finished) return
                 val words = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()
-                if (words.isNullOrBlank()) onFailure("कुछ सुनाई नहीं दिया।") else onResult(words)
+                finish()
+                if (words.isNullOrBlank()) onFailure("कुछ सुनाई नहीं दिया। फिर कोशिश करें।") else onResult(words)
             }
             override fun onPartialResults(partialResults: Bundle?) {}
             override fun onEvent(eventType: Int, params: Bundle?) {}
@@ -99,10 +117,18 @@ class MainActivity : ComponentActivity() {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, "hi-IN")
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, "hi-IN")
             putExtra(RecognizerIntent.EXTRA_PROMPT, "Kivya से बात करें")
-            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, true)
+            // Prefer online recognition when an offline Hindi model is not installed.
+            putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, false)
+            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
-        engine.startListening(intent)
+        try {
+            engine.startListening(intent)
+        } catch (_: Exception) {
+            finish()
+            onFailure("Voice service शुरू नहीं हो पाई। Google app या speech service अपडेट करें।")
+        }
     }
 
     private fun phoneAction(command: String): String {
@@ -130,6 +156,47 @@ class MainActivity : ComponentActivity() {
                     } else {
                         startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$number")))
                         "$number डायलर में तैयार है। कॉल करने के लिए फोन ऐप में Call दबाएँ।"
+                    }
+                }
+                // Open Android's alarm UI; the user reviews and saves the alarm there.
+                ("अलार्म" in c || "alarm" in c) -> {
+                    val time = Regex("(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?", RegexOption.IGNORE_CASE).find(c)
+                    if (time == null) {
+                        startActivity(Intent(AlarmClock.ACTION_SHOW_ALARMS))
+                        "अलार्म ऐप खोल रही हूँ। समय चुनकर सेव करें।"
+                    } else {
+                        var hour = time.groupValues[1].toIntOrNull() ?: 7
+                        val minute = time.groupValues[2].toIntOrNull() ?: 0
+                        val suffix = time.groupValues[3].lowercase(Locale.ROOT)
+                        if (suffix == "pm" && hour in 1..11) hour += 12
+                        if (suffix == "am" && hour == 12) hour = 0
+                        if (hour !in 0..23 || minute !in 0..59) {
+                            startActivity(Intent(AlarmClock.ACTION_SHOW_ALARMS))
+                            "समय समझ नहीं आया। अलार्म ऐप खोल रही हूँ।"
+                        } else {
+                            startActivity(Intent(AlarmClock.ACTION_SET_ALARM).putExtra(AlarmClock.EXTRA_HOUR, hour).putExtra(AlarmClock.EXTRA_MINUTES, minute).putExtra(AlarmClock.EXTRA_MESSAGE, "Kivya alarm"))
+                            "अलार्म $hour बजकर $minute मिनट के लिए तैयार है। Clock ऐप में सेव करें।"
+                        }
+                    }
+                }
+                // Calendar event creation is delegated to the user's calendar app.
+                ("कैलेंडर" in c || "calendar" in c || "इवेंट" in c || "event" in c) -> {
+                    val eventTitle = command.replace(Regex("(?i)कैलेंडर|calendar|इवेंट|event|खोलो|खोलना|में|add|create|open"), "").trim()
+                    val eventIntent = Intent(Intent.ACTION_INSERT).setData(CalendarContract.Events.CONTENT_URI)
+                        .putExtra(CalendarContract.Events.TITLE, eventTitle.ifBlank { "नया इवेंट" })
+                    startActivity(eventIntent)
+                    "Calendar में नया event तैयार कर रही हूँ। तारीख और समय जाँचकर सेव करें।"
+                }
+                // Send a search query to the system's web search handler.
+                ("खोजो" in c || "ढूंढो" in c || "सर्च" in c || "search" in c || "find" in c) -> {
+                    val query = command.replace(Regex("(?i)google|गूगल|पर|खोजो|ढूंढो|सर्च करो|सर्च|search for|search|find"), "").trim()
+                    if (query.isBlank()) {
+                        startActivity(Intent(Intent.ACTION_WEB_SEARCH))
+                        "क्या खोजना है? Google search खोल रही हूँ।"
+                    } else {
+                        val searchIntent = Intent(Intent.ACTION_WEB_SEARCH).putExtra(SearchManager.QUERY, query)
+                        try { startActivity(searchIntent) } catch (_: Exception) { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=" + Uri.encode(query)))) }
+                        "$query खोज रही हूँ।"
                     }
                 }
                 "सेटिंग" in c || "settings" in c -> { startActivity(Intent(Settings.ACTION_SETTINGS)); "सेटिंग्स खोल रही हूँ।" }
