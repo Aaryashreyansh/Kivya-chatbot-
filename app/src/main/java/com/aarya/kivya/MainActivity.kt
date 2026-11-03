@@ -114,12 +114,7 @@ class MainActivity : ComponentActivity() {
                 tts?.language = Locale("hi", "IN")
                 tts?.setSpeechRate(0.96f)
                 tts?.setPitch(1.04f)
-                tts?.speak(
-                    "हेलो आर्या, स्वागत है। मैं KIVYA हूँ। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?",
-                    TextToSpeech.QUEUE_FLUSH,
-                    null,
-                    "kivya-welcome"
-                )
+                say("हेलो आर्या, स्वागत है। मैं किव्या हूँ। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?")
             }
         }
         if (SpeechRecognizer.isRecognitionAvailable(this)) speech = SpeechRecognizer.createSpeechRecognizer(this)
@@ -207,7 +202,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun say(text: String) {
-        tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "kivya-reply")
+        // Keep the visual brand as KIVYA, but pronounce it as one Hindi word in speech.
+        val speechText = text
+            .replace(Regex("(?i)K\\s*I\\s*V\\s*Y\\s*A"), "किव्या")
+            .replace(Regex("(?i)\\bKIVYA\\b"), "किव्या")
+            .replace(Regex("(?i)\\bKivya\\b"), "किव्या")
+        tts?.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, "kivya-reply")
     }
 
     private fun startListening(onResult: (String) -> Unit, onFailure: (String) -> Unit) {
