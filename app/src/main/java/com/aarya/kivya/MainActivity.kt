@@ -9,6 +9,8 @@ import android.os.Bundle
 import android.provider.Settings
 import android.provider.AlarmClock
 import android.provider.CalendarContract
+import android.telecom.TelecomManager
+import android.app.role.RoleManager
 import android.provider.MediaStore
 import android.app.SearchManager
 import android.speech.RecognitionListener
@@ -260,6 +262,24 @@ class MainActivity : ComponentActivity() {
         val c = command.lowercase(Locale.ROOT)
         return try {
             when {
+                "कॉल उठाओ" in c || "कॉल रिसीव" in c || "answer call" in c || "pick up call" in c -> {
+                    if (KivyaCallController.answerIncomingCall()) "आने वाली कॉल रिसीव कर ली।"
+                    else "अभी कोई incoming call उपलब्ध नहीं है। KIVYA को Default Phone App बनाना जरूरी है।"
+                }
+                "कॉल काटो" in c || "कॉल रिजेक्ट" in c || "reject call" in c || "decline call" in c -> {
+                    if (KivyaCallController.rejectIncomingCall()) "कॉल reject कर दी।"
+                    else "अभी कोई incoming call उपलब्ध नहीं है।"
+                }
+                "default dialer" in c || "डिफॉल्ट डायलर" in c || "फोन ऐप बनाओ" in c -> {
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                        val roleManager = getSystemService(RoleManager::class.java)
+                        if (roleManager.isRoleAvailable(RoleManager.ROLE_DIALER) && !roleManager.isRoleHeld(RoleManager.ROLE_DIALER)) {
+                            startActivity(roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER))
+                            "KIVYA को Default Phone App बनाने की अनुमति चुनें।"
+                        } else if (roleManager.isRoleHeld(RoleManager.ROLE_DIALER)) "KIVYA पहले से Default Phone App है।"
+                        else "इस Android version पर Dialer role उपलब्ध नहीं है।"
+                    } else "इस Android version पर Default Dialer role request उपलब्ध नहीं है।"
+                }
                 // Resolve a named contact when permission is already granted; never send without user confirmation.
                 ("मैसेज भेजो" in c || "मैसेज भेजना" in c || "message " in c && ("send" in c || "bhejo" in c) || "whatsapp पर" in c && "भेजो" in c || "sms" in c && "भेजो" in c) -> {
                     val parts = command.split(":", limit = 2)
@@ -492,6 +512,23 @@ private fun KivyaHome(
     var prompt by remember { mutableStateOf("") }
     var response by remember { mutableStateOf("हेलो आर्या, स्वागत है। मैं KIVYA हूँ। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?") }
     var listening by remember { mutableStateOf(false) }
+    var wakeEnabled by remember { mutableStateOf(false) }
+    val wakeMicPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            try {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, KivyaWakeWordService::class.java).setAction(KivyaWakeWordService.ACTION_START)
+                )
+                wakeEnabled = true
+                response = "Hey KIVYA wake-word listening चालू है। बंद करने के लिए Stop दबाएँ।"
+            } catch (_: Exception) {
+                response = "Wake-word service शुरू नहीं हो पाई। Notification और microphone permission जाँचें।"
+            }
+        } else {
+            response = "Wake Word के लिए microphone permission जरूरी है।"
+        }
+    }
     val memory = remember { KivyaMemory(context) }
     val automation = remember { KivyaAutomation(context) }
     val chat = remember {
@@ -681,6 +718,19 @@ private fun KivyaHome(
         }
     }
 
+    LaunchedEffect(Unit) {
+        val activity = context as? MainActivity
+        if (activity?.intent?.getBooleanExtra(KivyaWakeWordService.EXTRA_WAKE_WORD, false) == true) {
+            activity.intent.removeExtra(KivyaWakeWordService.EXTRA_WAKE_WORD)
+            delay(500)
+            listening = true
+            listen(
+                { words -> listening = false; process(words) },
+                { error -> listening = false; response = error }
+            )
+        }
+    }
+
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
         if (allowed) {
             listening = true
@@ -733,6 +783,23 @@ private fun KivyaHome(
                     QuickAction("Settings", Icons.Default.Settings, Modifier.weight(1f)) { process("Settings खोलो") }
                 }
 
+                Spacer(Modifier.height(12.dp))
+                Button(
+                    onClick = {
+                        if (wakeEnabled) {
+                            context.startService(Intent(context, KivyaWakeWordService::class.java).setAction(KivyaWakeWordService.ACTION_STOP))
+                            wakeEnabled = false
+                            response = "Hey KIVYA wake-word listening बंद कर दी।"
+                        } else {
+                            wakeMicPermission.launch(Manifest.permission.RECORD_AUDIO)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(50.dp),
+                    shape = RoundedCornerShape(15.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = if (wakeEnabled) Color(0xFFB45B72) else Color(0xFF203B55))
+                ) {
+                    Text(if (wakeEnabled) "STOP WAKE WORD" else "HEY KIVYA", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                }
                 Spacer(Modifier.height(16.dp))
                 Spacer(Modifier.height(10.dp))
                 Row(

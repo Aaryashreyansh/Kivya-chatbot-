@@ -1,7 +1,7 @@
 name: Android CI
 on:
   push:
-    branches: [ main ]
+    branches: [ main, feature/call-pickup-wakeword ]
   workflow_dispatch:
 permissions:
   contents: write
@@ -25,6 +25,23 @@ jobs:
           mkdir -p app/libs
           curl --fail --location --retry 3 --output app/libs/sherpa-onnx-2.0.1.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-2.0.1.aar
           echo "a8d09d1d32f3eb8520482c6d3d43fae674681c5b050385967c70a3c2c9bf0ee7  app/libs/sherpa-onnx-2.0.1.aar" | sha256sum --check
+      - name: Download and prepare English KIVYA wake-word model
+        run: |
+          MODEL_DIR="sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
+          curl --fail --location --retry 3 --output kws-model.tar.bz2 "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/${MODEL_DIR}.tar.bz2"
+          mkdir -p app/src/main/assets
+          tar -xjf kws-model.tar.bz2
+          python3 -m pip install --disable-pip-version-check sherpa-onnx==2.0.1 sentencepiece pypinyin
+          printf 'HEY KIVYA @HEY_KIVYA\n' > "${MODEL_DIR}/kivya-keywords-raw.txt"
+          sherpa-onnx-cli text2token --tokens "${MODEL_DIR}/tokens.txt" --tokens-type bpe --bpe-model "${MODEL_DIR}/bpe.model" "${MODEL_DIR}/kivya-keywords-raw.txt" "${MODEL_DIR}/keywords.txt"
+          mkdir -p app/src/main/assets/kivya-kws-en
+          cp "${MODEL_DIR}/encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx" app/src/main/assets/kivya-kws-en/
+          cp "${MODEL_DIR}/decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx" app/src/main/assets/kivya-kws-en/
+          cp "${MODEL_DIR}/joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx" app/src/main/assets/kivya-kws-en/
+          cp "${MODEL_DIR}/tokens.txt" "${MODEL_DIR}/keywords.txt" app/src/main/assets/kivya-kws-en/
+          test -s app/src/main/assets/kivya-kws-en/keywords.txt
+          test -s app/src/main/assets/kivya-kws-en/encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx
+          rm -rf "${MODEL_DIR}" kws-model.tar.bz2
       - name: Build debug and optimized test release APKs
         run: gradle assembleDebug assembleRelease
       - name: Upload debug APK
