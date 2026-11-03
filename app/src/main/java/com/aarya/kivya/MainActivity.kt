@@ -27,6 +27,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -359,7 +361,17 @@ private fun KivyaHome(
     fun process(text: String) {
         prompt = text
         chat.add("तुम: $text")
-        if (mode == "Phone") {
+        val normalized = text.lowercase(Locale.ROOT)
+        val isDeviceCommand = listOf(
+            "settings", "सेटिंग", "wifi", "wi-fi", "वाईफाई", "ब्लूटूथ", "bluetooth",
+            "youtube", "यूट्यूब", "whatsapp", "व्हाट्सएप", "instagram", "इंस्टाग्राम",
+            "camera", "कैमरा", "फोन", "phone", "dialer", "डायलर", "call ", "कॉल",
+            "alarm", "अलार्म", "calendar", "कैलेंडर", "event", "इवेंट",
+            "maps", "मैप", "नक्शा", "chrome", "क्रोम", "messages", "मैसेज",
+            "call history", "कॉल हिस्ट्री", "कॉल लॉग", "recent calls",
+            "खोजो", "ढूंढो", "सर्च", "search", "समय", "टाइम", "time"
+        ).any { normalized.contains(it) }
+        if (isDeviceCommand) {
             val answer = phoneAction(text)
             response = answer
             chat.add("KIVYA: $answer")
@@ -410,7 +422,8 @@ private fun KivyaHome(
         Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF172744), Deep, Color(0xFF090D19))))) {
             Column(
                 Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
-                    .imePadding().padding(horizontal = 20.dp, vertical = 14.dp)
+                    .imePadding().verticalScroll(rememberScrollState())
+                    .padding(horizontal = 20.dp, vertical = 14.dp).padding(bottom = 82.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     KivyaMark(Modifier.size(54.dp))
@@ -481,39 +494,39 @@ private fun KivyaHome(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = {
-                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-                            listening = true
-                            listen({ words -> listening = false; process(words) }, { error -> listening = false; response = error })
-                        } else micPermission.launch(Manifest.permission.RECORD_AUDIO)
-                    },
-                    modifier = Modifier.fillMaxWidth().height(54.dp).shadow(10.dp, CircleShape),
-                    shape = CircleShape,
-                    colors = ButtonDefaults.buttonColors(containerColor = if (listening) Color(0xFFB45B72) else Aqua)
-                ) {
-                    Icon(Icons.Default.Mic, null, tint = Deep)
-                    Spacer(Modifier.width(9.dp))
-                    Text(if (listening) "सुन रही हूँ..." else "TALK TO KIVYA", color = Deep, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.2.sp)
-                }
-
                 Spacer(Modifier.height(14.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("RECENT ACTIVITY", color = Muted, fontSize = 10.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                     Spacer(Modifier.weight(1f))
                     Text("ON-DEVICE COMMANDS", color = Aqua.copy(alpha = .75f), fontSize = 9.sp)
                 }
-                LazyColumn(
-                    Modifier.weight(1f).fillMaxWidth().padding(top = 8.dp),
+                Column(
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
-                    items(chat.takeLast(5).reversed()) { line ->
+                    chat.takeLast(5).reversed().forEach { line ->
                         Surface(color = Color.White.copy(alpha = .045f), shape = RoundedCornerShape(13.dp)) {
                             Text(line, color = Color(0xFFDDE6F5), fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 10.dp))
                         }
                     }
                 }
-                Text("Voice recognition may need your phone's offline language pack.", color = Muted.copy(alpha = .75f), fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp))
+                Text("Voice recognition needs microphone permission and your phone's speech service.", color = Muted.copy(alpha = .75f), fontSize = 9.sp, modifier = Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp))
+            }
+            Button(
+                onClick = {
+                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                        listening = true
+                        listen({ words -> listening = false; process(words) }, { error -> listening = false; response = error })
+                    } else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+                },
+                modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)
+                    .height(56.dp).shadow(10.dp, CircleShape),
+                shape = CircleShape,
+                colors = ButtonDefaults.buttonColors(containerColor = if (listening) Color(0xFFB45B72) else Aqua)
+            ) {
+                Icon(Icons.Default.Mic, null, tint = Deep)
+                Spacer(Modifier.width(9.dp))
+                Text(if (listening) "सुन रही हूँ..." else "TALK TO KIVYA", color = Deep, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.2.sp)
             }
         }
     }
