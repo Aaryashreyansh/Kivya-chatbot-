@@ -1,0 +1,8 @@
+appId: com.aarya.kivya
+---
+- launchApp
+- assertVisible: "नमस्ते, मैं Kivya हूँ"
+- assertVisible: "HEY KIVYA"
+- assertVisible: "Message KIVYA..."
+- assertVisible: "TALK TO KIVYA"
+- assertVisible: "CONVERSATION"
