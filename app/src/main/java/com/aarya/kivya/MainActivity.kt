@@ -427,7 +427,8 @@ private fun KivyaHome(
             "alarm", "अलार्म", "calendar", "कैलेंडर", "event", "इवेंट",
             "maps", "मैप", "नक्शा", "chrome", "क्रोम", "messages", "मैसेज",
             "call history", "कॉल हिस्ट्री", "कॉल लॉग", "recent calls",
-            "खोजो", "ढूंढो", "सर्च", "search", "समय", "टाइम", "time"
+            "खोजो", "ढूंढो", "सर्च", "search", "समय", "टाइम", "time",
+            "open ", "launch ", "start ", "खोलो", "खोलना", "ओपन करो", "चालू करो"
         ).any { normalized.contains(it) }
         if (isDeviceCommand) {
             val answer = phoneAction(text)
