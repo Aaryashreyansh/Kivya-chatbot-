@@ -1,0 +1,8 @@
+appId: com.aarya.kivya
+---
+- tapOn: "Message KIVYA..."
+- inputText: "Reply with exactly KIVYA_OFFLINE_OK and nothing else."
+- pressKey: ENTER
+- extendedWaitUntil:
+    visible: "KIVYA_OFFLINE_OK"
+    timeout: 120000
