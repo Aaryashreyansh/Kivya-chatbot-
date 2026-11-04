@@ -1,7 +1,10 @@
 appId: com.aarya.kivya
 ---
 - launchApp
-- assertVisible: "नमस्ते, मैं Kivya हूँ"
+- extendedWaitUntil:
+    visible: "KIVYA"
+    timeout: 30000
+- assertVisible: "AI ASSISTANT"
 - assertVisible: "HEY KIVYA"
 - assertVisible: "Message KIVYA..."
 - assertVisible: "TALK TO KIVYA"
