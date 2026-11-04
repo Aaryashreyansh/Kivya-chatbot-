@@ -79,7 +79,7 @@ jobs:
           disable-animations: true
           emulator-boot-timeout: 900
           script: |
-            set -euo pipefail
+            set -eu
             mkdir -p test-results
             adb wait-for-device
             adb install -r app/build/outputs/apk/debug/app-debug.apk
@@ -103,7 +103,7 @@ jobs:
             fi
             echo "PASS: user Stop action exits foreground wake-word mode" >> test-results/results.txt
 
-            if [[ "${{ inputs.run_offline_model_test }}" == "true" ]]; then
+            if [ "${{ inputs.run_offline_model_test }}" = "true" ]; then
               maestro test .maestro/flows/offline-download.yaml
               adb shell svc wifi disable
               adb shell svc data disable
