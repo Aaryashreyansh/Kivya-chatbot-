@@ -1,0 +1,7 @@
+appId: com.aarya.kivya
+---
+- launchApp
+- tapOn: "DOWNLOAD · 347 MB"
+- extendedWaitUntil:
+    visible: "तैयार। अब चैट बिना इंटरनेट चलेगी।"
+    timeout: 1200000
