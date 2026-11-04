@@ -49,27 +49,58 @@ jobs:
           curl -Ls "https://get.maestro.mobile.dev" | bash
           echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
 
-      - name: Run KIVYA on Android Emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          arch: x86_64
-          profile: pixel_2
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
-          disable-animations: true
-          emulator-boot-timeout: 900
-          script: |
-            export MAESTRO_DRIVER_STARTUP_TIMEOUT=240000
-            export MAESTRO_CLI_NO_ANALYTICS=true
-            adb wait-for-device
-            adb devices -l
-            adb shell getprop sys.boot_completed
-            adb install -r artifacts/app-debug.apk
-            adb shell pm list packages | grep -F "package:com.aarya.kivya"
-            adb shell monkey -p com.aarya.kivya 1
-            sleep 20
-            adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true
-            maestro test .maestro/flows/smoke.yaml
+      - name: Install Android emulator packages
+        shell: bash
+        run: |
+          sdkmanager --install "platform-tools" "emulator" "system-images;android-34;google_apis;x86_64"
+          echo "no" | avdmanager create avd --force -n kivya-api34 -k "system-images;android-34;google_apis;x86_64" -d pixel_2
+
+      - name: Boot Android emulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          nohup emulator -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -wipe-data > /tmp/kivya-emulator.log 2>&1 &
+          echo $! > /tmp/kivya-emulator.pid
+          adb wait-for-device
+          booted=false
+          for attempt in $(seq 1 120); do
+            state="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
+            if [ "$state" = "1" ]; then booted=true; break; fi
+            sleep 5
+          done
+          if [ "$booted" != "true" ]; then
+            cat /tmp/kivya-emulator.log
+            echo "Android emulator did not finish booting within 10 minutes"
+            exit 1
+          fi
+          adb shell input keyevent 82
+          adb shell settings put global window_animation_scale 0
+          adb shell settings put global transition_animation_scale 0
+          adb shell settings put global animator_duration_scale 0
+          adb devices -l
+
+      - name: Run KIVYA UI smoke test
+        shell: bash
+        run: |
+          set -euo pipefail
+          export MAESTRO_DRIVER_STARTUP_TIMEOUT=240000
+          export MAESTRO_CLI_NO_ANALYTICS=true
+          adb install -r artifacts/app-debug.apk
+          adb shell pm grant com.aarya.kivya android.permission.RECORD_AUDIO
+          adb shell pm grant com.aarya.kivya android.permission.POST_NOTIFICATIONS || true
+          adb shell monkey -p com.aarya.kivya 1
+          sleep 15
+          adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true
+          maestro test .maestro/flows/smoke.yaml
+
+      - name: Capture emulator diagnostics
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p test-results
+          adb logcat -d -t 5000 > test-results/logcat.txt 2>&1 || true
+          adb shell dumpsys activity activities > test-results/activities.txt 2>&1 || true
+          cp /tmp/kivya-emulator.log test-results/emulator.log 2>/dev/null || true
 
       - name: Upload Maestro debug artifacts
         if: always()
