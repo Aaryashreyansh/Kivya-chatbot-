@@ -61,8 +61,8 @@ jobs:
           script: |
             adb wait-for-device
             adb shell getprop sys.boot_completed
-            adb shell pm list packages | grep com.aarya.kivya
             adb install -r artifacts/app-debug.apk
+            adb shell pm list packages | grep -F "package:com.aarya.kivya"
             adb shell monkey -p com.aarya.kivya 1
             sleep 15
             adb shell dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' || true
