@@ -735,12 +735,17 @@ private fun KivyaHome(
                             connection.disconnect()
                         }
                     } catch (_: Exception) {
-                        if (offlineChat.isReady()) {
-                            try { offlineChat.reply(text) } catch (_: Exception) {
-                                "Server और Offline AI दोनों अभी उपलब्ध नहीं हैं।"
+                        if (offlineChat.isReady() || offlineChat.isModelDownloaded()) {
+                            try {
+                                // A downloaded model may not yet be loaded after an app restart.
+                                // Load it lazily on the first network failure, then answer locally.
+                                if (!offlineChat.isReady()) offlineChat.installAndLoad { }
+                                offlineChat.reply(text)
+                            } catch (offlineError: Exception) {
+                                "Online server और Offline AI दोनों उपलब्ध नहीं हैं: ${offlineError.message ?: "मॉडल शुरू नहीं हो पाया।"}"
                             }
                         } else {
-                            "Server उपलब्ध नहीं है। Offline AI डाउनलोड करने के लिए नीचे बटन दबाएँ।"
+                            "Server उपलब्ध नहीं है। एक बार Offline AI डाउनलोड करें, फिर बिना इंटरनेट भी जवाब मिल सकेगा।"
                         }
                     }
                 }
