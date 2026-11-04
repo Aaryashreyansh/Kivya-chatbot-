@@ -1,0 +1,128 @@
+name: KIVYA Functional Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, test/kivya-functional-suite]
+  workflow_dispatch:
+    inputs:
+      run_offline_model_test:
+        description: "Download the ~347 MB Qwen model and test a reply with networking disabled"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kivya-functional-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-emulator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+
+      - name: Fetch checksum-verified Sherpa-ONNX runtime
+        run: |
+          mkdir -p app/libs
+          curl --fail --location --retry 3 --output app/libs/sherpa-onnx-2.0.1.aar https://github.com/k2-fsa/sherpa-onnx/releases/download/v2.0.1/sherpa-onnx-2.0.1.aar
+          echo "a8d09d1d32f3eb8520482c6d3d43fae674681c5b050385967c70a3c2c9bf0ee7  app/libs/sherpa-onnx-2.0.1.aar" | sha256sum --check
+
+      - name: Prepare the exact wake-word model used by the app
+        run: |
+          MODEL_DIR="sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
+          curl --fail --location --retry 3 --output kws-model.tar.bz2 "https://github.com/k2-fsa/sherpa-onnx/releases/download/kws-models/${MODEL_DIR}.tar.bz2"
+          tar -xjf kws-model.tar.bz2
+          python3 -m pip install --disable-pip-version-check sherpa-onnx==2.0.1 sentencepiece pypinyin
+          printf 'HEY KIVYA @HEY_KIVYA\n' > "${MODEL_DIR}/kivya-keywords-raw.txt"
+          sherpa-onnx-cli text2token --tokens "${MODEL_DIR}/tokens.txt" --tokens-type bpe --bpe-model "${MODEL_DIR}/bpe.model" "${MODEL_DIR}/kivya-keywords-raw.txt" "${MODEL_DIR}/keywords.txt"
+          mkdir -p app/src/main/assets/kivya-kws-en
+          cp "${MODEL_DIR}/encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx" app/src/main/assets/kivya-kws-en/
+          cp "${MODEL_DIR}/decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx" app/src/main/assets/kivya-kws-en/
+          cp "${MODEL_DIR}/joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx" app/src/main/assets/kivya-kws-en/
+          cp "${MODEL_DIR}/tokens.txt" "${MODEL_DIR}/keywords.txt" app/src/main/assets/kivya-kws-en/
+          test -s app/src/main/assets/kivya-kws-en/keywords.txt
+          test -s app/src/main/assets/kivya-kws-en/encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx
+
+      - name: Build debug APK
+        run: gradle assembleDebug --stacktrace
+
+      - name: Install Maestro
+        run: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+
+      - name: Run KIVYA emulator checks
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          profile: pixel_2
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim
+          disable-animations: true
+          emulator-boot-timeout: 900
+          script: |
+            set -euo pipefail
+            mkdir -p test-results
+            adb wait-for-device
+            adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb shell pm grant com.aarya.kivya android.permission.RECORD_AUDIO
+            adb shell pm grant com.aarya.kivya android.permission.POST_NOTIFICATIONS || true
+            adb shell monkey -p com.aarya.kivya 1
+            sleep 8
+            maestro test .maestro/flows/smoke.yaml
+            echo "PASS: app install, launch, and primary UI assertions" >> test-results/results.txt
+
+            maestro test .maestro/flows/wake-service.yaml
+            sleep 3
+            adb shell dumpsys activity services com.aarya.kivya | grep -F "KivyaWakeWordService"
+            echo "PASS: wake-word foreground service starts with microphone permission and packaged model assets" >> test-results/results.txt
+
+            maestro test .maestro/flows/wake-stop.yaml
+            sleep 2
+            if adb shell dumpsys activity services com.aarya.kivya | grep -F "KivyaWakeWordService" | grep -q "isForeground=true"; then
+              echo "FAIL: wake-word service still foreground after Stop" >> test-results/results.txt
+              exit 1
+            fi
+            echo "PASS: user Stop action exits foreground wake-word mode" >> test-results/results.txt
+
+            if [[ "${{ inputs.run_offline_model_test }}" == "true" ]]; then
+              maestro test .maestro/flows/offline-download.yaml
+              adb shell svc wifi disable
+              adb shell svc data disable
+              maestro test .maestro/flows/offline-reply.yaml
+              echo "PASS: offline model produced the expected marker with network disabled" >> test-results/results.txt
+            else
+              echo "NOT RUN: Qwen offline inference (opt-in; downloads approximately 347 MB)" >> test-results/results.txt
+            fi
+
+            adb shell pidof com.aarya.kivya
+            echo "PASS: KIVYA process remained alive after functional checks" >> test-results/results.txt
+
+      - name: Upload functional test report and Maestro diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kivya-functional-test-report-${{ github.run_number }}
+          path: |
+            test-results/
+            /home/runner/.maestro/tests/
+          if-no-files-found: warn
+          retention-days: 14
