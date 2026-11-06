@@ -1,11 +1,18 @@
-import os
-
 from fastapi.testclient import TestClient
 
 import main
 
-
 client = TestClient(main.app)
+
+
+def guest_token():
+    response = client.post("/auth/guest")
+    assert response.status_code == 200
+    return response.json()["access_token"]
+
+
+def auth(token):
+    return {"Authorization": f"Bearer {token}"}
 
 
 def test_health_is_public_and_does_not_expose_credentials():
@@ -17,37 +24,46 @@ def test_health_is_public_and_does_not_expose_credentials():
     assert "token" not in body
 
 
-def test_chat_rejects_missing_bearer_token(monkeypatch):
-    monkeypatch.setenv("KIVYA_API_TOKEN", "x" * 48)
-    response = client.post("/v1/chat", json={"message": "hello"})
-    assert response.status_code == 401
+def test_guest_session_creation_and_authenticated_access():
+    token = guest_token()
+    response = client.get("/v1/conversations", headers=auth(token))
+    assert response.status_code == 200
+    assert response.json() == []
 
 
-def test_chat_fails_closed_if_server_token_is_not_configured(monkeypatch):
-    monkeypatch.delenv("KIVYA_API_TOKEN", raising=False)
-    response = client.post(
-        "/v1/chat",
-        headers={"Authorization": "Bearer " + "x" * 48},
-        json={"message": "hello"},
-    )
-    assert response.status_code == 503
+def test_private_conversations_are_scoped_to_guest():
+    token_a = guest_token()
+    token_b = guest_token()
+    created = client.post("/v1/conversations", headers=auth(token_a),
+                          json={"title": "Private chat"})
+    assert created.status_code == 200
+    visible_to_a = client.get("/v1/conversations", headers=auth(token_a)).json()
+    visible_to_b = client.get("/v1/conversations", headers=auth(token_b)).json()
+    assert len(visible_to_a) == 1
+    assert visible_to_b == []
 
 
-def test_chat_rejects_invalid_bearer_token(monkeypatch):
-    monkeypatch.setenv("KIVYA_API_TOKEN", "a" * 48)
-    response = client.post(
-        "/v1/chat",
-        headers={"Authorization": "Bearer " + "b" * 48},
-        json={"message": "hello"},
-    )
-    assert response.status_code == 401
+def test_missing_and_invalid_guest_credentials_are_rejected():
+    assert client.get("/v1/conversations").status_code == 401
+    assert client.get("/v1/conversations", headers=auth("invalid")).status_code == 401
 
 
-def test_chat_validates_message_length(monkeypatch):
-    monkeypatch.setenv("KIVYA_API_TOKEN", "x" * 48)
-    response = client.post(
-        "/v1/chat",
-        headers={"Authorization": "Bearer " + "x" * 48},
-        json={"message": "a" * 6001},
-    )
+def test_logout_revokes_guest_session():
+    token = guest_token()
+    response = client.post("/auth/logout", headers=auth(token))
+    assert response.status_code == 200
+    assert client.get("/v1/conversations", headers=auth(token)).status_code == 401
+
+
+def test_guest_can_delete_own_data_and_session():
+    token = guest_token()
+    response = client.delete("/auth/guest", headers=auth(token))
+    assert response.status_code == 200
+    assert client.get("/v1/conversations", headers=auth(token)).status_code == 401
+
+
+def test_message_length_is_validated():
+    token = guest_token()
+    response = client.post("/v1/chat", headers=auth(token),
+                            json={"message": "a" * 6001})
     assert response.status_code == 422
