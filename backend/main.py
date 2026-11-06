@@ -65,15 +65,13 @@ def enforce_rate_limit(client_ip: str) -> None:
         bucket.append(now)
 
 
-def current_guest(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
-    db: Session = Depends(get_db),
-) -> Guest:
+def current_guest(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
+                  db: Session = Depends(get_db)) -> Guest:
     raw = credentials.credentials if credentials else ""
     if not raw or len(raw) < 40:
         raise HTTPException(401, "Guest session required", headers={"WWW-Authenticate": "Bearer"})
-    token_hash = hashlib.sha256(raw.encode("utf-8")).hexdigest()
-    session = db.scalar(select(GuestSession).where(GuestSession.token_hash == token_hash))
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    session = db.scalar(select(GuestSession).where(GuestSession.token_hash == digest))
     now = datetime.now(timezone.utc)
     if not session or session.revoked or session.expires_at.replace(tzinfo=timezone.utc) <= now:
         raise HTTPException(401, "Guest session is invalid or expired")
@@ -109,11 +107,8 @@ class ConversationCreate(BaseModel):
 
 
 def _owned_conversation(db: Session, guest_id, conversation_id):
-    item = db.scalar(select(Conversation).where(
-        Conversation.id == conversation_id,
-        Conversation.guest_id == guest_id,
-        Conversation.deleted.is_(False),
-    ))
+    item = db.scalar(select(Conversation).where(Conversation.id == conversation_id,
+        Conversation.guest_id == guest_id, Conversation.deleted.is_(False)))
     if not item:
         raise HTTPException(404, "Conversation not found")
     return item
@@ -130,23 +125,23 @@ def create_guest_session(request: Request, db: Session = Depends(get_db)):
     ip = request.client.host if request.client else "unknown"
     enforce_rate_limit("guest:" + ip)
     guest = Guest()
-    raw_token = secrets.token_urlsafe(48)
+    raw = secrets.token_urlsafe(48)
     expires = datetime.now(timezone.utc) + timedelta(days=SESSION_DAYS)
     db.add(guest)
     db.flush()
     db.add(GuestSession(guest_id=guest.id,
-                        token_hash=hashlib.sha256(raw_token.encode("utf-8")).hexdigest(),
-                        expires_at=expires))
+        token_hash=hashlib.sha256(raw.encode("utf-8")).hexdigest(), expires_at=expires))
     db.commit()
-    return GuestSessionResponse(guest_id=guest.id, access_token=raw_token, expires_at=expires)
+    return GuestSessionResponse(guest_id=guest.id, access_token=raw, expires_at=expires)
 
 
 @app.post("/auth/logout")
-def logout(guest: Guest = Depends(current_guest), credentials: HTTPAuthorizationCredentials = Depends(_bearer),
+def logout(guest: Guest = Depends(current_guest),
+           credentials: HTTPAuthorizationCredentials = Depends(_bearer),
            db: Session = Depends(get_db)):
     digest = hashlib.sha256(credentials.credentials.encode("utf-8")).hexdigest()
     session = db.scalar(select(GuestSession).where(GuestSession.token_hash == digest,
-                                                   GuestSession.guest_id == guest.id))
+        GuestSession.guest_id == guest.id))
     if session:
         session.revoked = True
         db.commit()
@@ -155,9 +150,8 @@ def logout(guest: Guest = Depends(current_guest), credentials: HTTPAuthorization
 
 @app.get("/v1/conversations")
 def list_conversations(guest: Guest = Depends(current_guest), db: Session = Depends(get_db)):
-    rows = db.scalars(select(Conversation).where(
-        Conversation.guest_id == guest.id, Conversation.deleted.is_(False)
-    ).order_by(Conversation.updated_at.desc()).limit(100)).all()
+    rows = db.scalars(select(Conversation).where(Conversation.guest_id == guest.id,
+        Conversation.deleted.is_(False)).order_by(Conversation.updated_at.desc()).limit(100)).all()
     return [{"id": str(c.id), "title": c.title, "created_at": c.created_at,
              "updated_at": c.updated_at} for c in rows]
 
@@ -176,9 +170,8 @@ def create_conversation(payload: ConversationCreate, guest: Guest = Depends(curr
 def get_messages(conversation_id: UUID, guest: Guest = Depends(current_guest),
                  db: Session = Depends(get_db)):
     _owned_conversation(db, guest.id, conversation_id)
-    rows = db.scalars(select(Message).where(
-        Message.conversation_id == conversation_id
-    ).order_by(Message.created_at.asc()).limit(500)).all()
+    rows = db.scalars(select(Message).where(Message.conversation_id == conversation_id)
+        .order_by(Message.created_at.asc()).limit(500)).all()
     return [{"id": str(m.id), "role": m.role, "content": m.content, "created_at": m.created_at}
             for m in rows]
 
@@ -187,15 +180,19 @@ def get_messages(conversation_id: UUID, guest: Guest = Depends(current_guest),
 def delete_conversation(conversation_id: UUID, guest: Guest = Depends(current_guest),
                         db: Session = Depends(get_db)):
     item = _owned_conversation(db, guest.id, conversation_id)
-    item.deleted = True
+    db.execute(delete(Message).where(Message.conversation_id == conversation_id))
+    db.delete(item)
     db.commit()
     return {"status": "deleted"}
 
 
 @app.delete("/auth/guest")
 def delete_guest_data(guest: Guest = Depends(current_guest), db: Session = Depends(get_db)):
-    guest.deleted = True
-    db.query(GuestSession).filter(GuestSession.guest_id == guest.id).update({"revoked": True})
+    conversation_ids = select(Conversation.id).where(Conversation.guest_id == guest.id)
+    db.execute(delete(Message).where(Message.conversation_id.in_(conversation_ids)))
+    db.execute(delete(Conversation).where(Conversation.guest_id == guest.id))
+    db.execute(delete(GuestSession).where(GuestSession.guest_id == guest.id))
+    db.delete(guest)
     db.commit()
     return {"status": "guest_data_deleted"}
 
@@ -207,36 +204,28 @@ def chat(payload: ChatRequest, request: Request, guest: Guest = Depends(current_
     enforce_rate_limit("chat:" + str(guest.id) + ":" + ip)
     if not GEMINI_API_KEY:
         raise HTTPException(503, "Gemini API is not configured")
-
     if payload.conversation_id:
         conversation = _owned_conversation(db, guest.id, payload.conversation_id)
     else:
         conversation = Conversation(guest_id=guest.id, title=payload.message[:80])
         db.add(conversation)
         db.flush()
-
-    recent = db.scalars(select(Message).where(
-        Message.conversation_id == conversation.id
-    ).order_by(Message.created_at.desc()).limit(12)).all()
+    recent = db.scalars(select(Message).where(Message.conversation_id == conversation.id)
+        .order_by(Message.created_at.desc()).limit(12)).all()
     context = "\n".join(f"{m.role}: {m.content[:1000]}" for m in reversed(recent))
-    language_hint = {"hi": "Reply in natural, clear Hindi.",
-                     "en": "Reply in natural, clear English.",
+    language_hint = {"hi": "Reply in natural, clear Hindi.", "en": "Reply in natural, clear English.",
                      "auto": "Reply in the language used by the user."}[payload.language]
     instruction = ("You are KIVYA, a helpful, honest phone and technology assistant. "
-                   "Be concise, practical, and friendly. Use Google Search when current facts "
-                   "materially improve the answer. Never claim to control the phone unless the "
-                   "Android app performed the action. " + language_hint)
+        "Be concise, practical, and friendly. Use Google Search when current facts materially "
+        "improve the answer. Never claim to control the phone unless the Android app performed "
+        "the action. " + language_hint)
     try:
         client = genai.Client(api_key=GEMINI_API_KEY)
-        interaction = client.interactions.create(
-            model=GEMINI_MODEL,
-            input=("Recent conversation context:\n" + context +
-                   "\n\nCurrent user message:\n" + payload.message),
-            system_instruction=instruction,
-            tools=[{"type": "google_search"}],
+        interaction = client.interactions.create(model=GEMINI_MODEL,
+            input="Recent conversation context:\n" + context + "\n\nCurrent user message:\n" + payload.message,
+            system_instruction=instruction, tools=[{"type": "google_search"}],
             generation_config={"max_output_tokens": MAX_OUTPUT_TOKENS, "thinking_level": "medium"},
-            timeout=GEMINI_TIMEOUT_SECONDS,
-        )
+            timeout=GEMINI_TIMEOUT_SECONDS)
         reply = (interaction.output_text or "").strip()
         if not reply:
             raise HTTPException(502, "Gemini returned no text. Please try again.")
