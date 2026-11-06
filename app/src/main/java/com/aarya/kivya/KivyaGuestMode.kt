@@ -76,7 +76,7 @@ class KivyaApiClient(private val store: GuestSessionStore) {
         private const val BASE_URL = "https://kivya-gemini-api.onrender.com"
     }
 
-    private fun request(path: String, method: String = "GET", body: JSONObject? = null, auth: Boolean = true): JSONObject {
+    private fun requestText(path: String, method: String = "GET", body: JSONObject? = null, auth: Boolean = true): String {
         val connection = (URL(BASE_URL + path).openConnection() as HttpURLConnection).apply {
             requestMethod = method
             connectTimeout = 15000
@@ -96,12 +96,12 @@ class KivyaApiClient(private val store: GuestSessionStore) {
             val status = connection.responseCode
             val stream = if (status in 200..299) connection.inputStream else connection.errorStream
             val raw = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-            val json = JSONObject(raw.ifBlank { "{}" })
             if (status !in 200..299) {
                 if (status == 401 && auth) store.clear()
-                throw IllegalStateException(json.optString("detail").ifBlank { "Server error ($status)" })
+                val detail = try { JSONObject(raw).optString("detail") } catch (_: Exception) { "" }
+                throw IllegalStateException(detail.ifBlank { "Server error ($status)" })
             }
-            return json
+            return raw
         } finally {
             connection.disconnect()
         }
@@ -109,7 +109,7 @@ class KivyaApiClient(private val store: GuestSessionStore) {
 
     fun ensureGuest(): String {
         store.read()?.let { return "Guest session active" }
-        val response = request("/auth/guest", "POST", auth = false)
+        val response = JSONObject(requestText("/auth/guest", "POST", auth = false))
         val token = response.optString("access_token")
         store.write(token)
         return "Guest mode सक्रिय है"
@@ -118,19 +118,16 @@ class KivyaApiClient(private val store: GuestSessionStore) {
     fun sendMessage(message: String, conversationId: String?): Pair<String, String> {
         val body = JSONObject().put("message", message).put("language", "auto")
         if (!conversationId.isNullOrBlank()) body.put("conversation_id", conversationId)
-        val response = request("/v1/chat", "POST", body)
+        val response = JSONObject(requestText("/v1/chat", "POST", body))
         return response.optString("reply") to response.optString("conversation_id")
     }
 
     fun fetchLatestHistory(): List<KivyaRemoteMessage> {
-        val conversations = request("/v1/conversations").optJSONArray("items")
-        val list = conversations ?: request("/v1/conversations").let { it.optJSONArray("conversations") }
-        if (list == null || list.length() == 0) return emptyList()
-        val id = list.getJSONObject(0).optString("id")
+        val conversations = JSONArray(requestText("/v1/conversations"))
+        if (conversations.length() == 0) return emptyList()
+        val id = conversations.getJSONObject(0).optString("id")
         if (id.isBlank()) return emptyList()
-        val messages = request("/v1/conversations/$id/messages").optJSONArray("items")
-            ?: request("/v1/conversations/$id/messages").optJSONArray("messages")
-            ?: return emptyList()
+        val messages = JSONArray(requestText("/v1/conversations/$id/messages"))
         return (0 until messages.length()).mapNotNull { index ->
             val item = messages.optJSONObject(index) ?: return@mapNotNull null
             KivyaRemoteMessage(item.optString("role"), item.optString("content"))
@@ -138,10 +135,10 @@ class KivyaApiClient(private val store: GuestSessionStore) {
     }
 
     fun logout() {
-        try { request("/auth/logout", "POST", JSONObject()) } finally { store.clear() }
+        try { requestText("/auth/logout", "POST", JSONObject()) } finally { store.clear() }
     }
 
     fun deleteGuestData() {
-        try { request("/auth/guest", "DELETE") } finally { store.clear() }
+        try { requestText("/auth/guest", "DELETE") } finally { store.clear() }
     }
 }
