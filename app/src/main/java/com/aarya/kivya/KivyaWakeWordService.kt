@@ -1,6 +1,7 @@
 package com.aarya.kivya
 
 import android.app.Notification
+import android.app.PendingIntent
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
@@ -64,7 +65,17 @@ class KivyaWakeWordService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("KIVYA is listening")
-            .setContentText("Wake-word detection is active. Tap Stop in KIVYA to turn it off.")
+            .setContentText("Wake-word detection is active. Use Stop here to turn it off.")
+            .addAction(
+                android.R.drawable.ic_media_pause,
+                "Stop",
+                PendingIntent.getService(
+                    this,
+                    4202,
+                    Intent(this, KivyaWakeWordService::class.java).setAction(ACTION_STOP),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
