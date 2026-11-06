@@ -106,7 +106,7 @@ jobs:
           export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
           test -s "$ANDROID_AVD_HOME/kivya-api34.ini"
           test -x "$ANDROID_HOME/emulator/emulator"
-          nohup "$ANDROID_HOME/emulator/emulator" -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
+          nohup "$ANDROID_HOME/emulator/emulator" -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel off -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
           echo $! > /tmp/kivya-emulator.pid
           if ! timeout 180s adb wait-for-device; then
             echo "ADB did not detect the emulator within 3 minutes."
