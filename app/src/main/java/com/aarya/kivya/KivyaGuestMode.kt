@@ -135,10 +135,12 @@ class KivyaApiClient(private val store: GuestSessionStore) {
     }
 
     fun logout() {
-        try { requestText("/auth/logout", "POST", JSONObject()) } finally { store.clear() }
+        requestText("/auth/logout", "POST", JSONObject())
+        store.clear()
     }
 
     fun deleteGuestData() {
-        try { requestText("/auth/guest", "DELETE") } finally { store.clear() }
+        requestText("/auth/guest", "DELETE")
+        store.clear()
     }
 }
