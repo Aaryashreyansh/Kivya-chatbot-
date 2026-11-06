@@ -2,9 +2,11 @@ import threading
 import time
 from collections import defaultdict, deque
 import os
+import secrets
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.middleware.cors import CORSMiddleware
 from google import genai
 from pydantic import BaseModel, Field
@@ -12,10 +14,26 @@ from pydantic import BaseModel, Field
 APP_NAME = "Kivya API"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip()
-MAX_OUTPUT_TOKENS = min(max(int(os.getenv("MAX_OUTPUT_TOKENS", "1200")), 64), 4096)
+MAX_OUTPUT_TOKENS = min(max(int(os.getenv("MAX_OUTPUT_TOKENS", "600")), 64), 1200)
 GEMINI_TIMEOUT_SECONDS = min(max(float(os.getenv("GEMINI_TIMEOUT_SECONDS", "45")), 5), 90)
 
-app = FastAPI(title=APP_NAME, version="0.3.0")
+app = FastAPI(title=APP_NAME, version="0.4.0")
+_bearer = HTTPBearer(auto_error=False)
+
+
+def require_api_token(credentials: HTTPAuthorizationCredentials | None = Depends(_bearer)) -> str:
+    """Require a server-configured bearer token; never accept credentials in URLs."""
+    configured = os.getenv("KIVYA_API_TOKEN", "").strip()
+    if len(configured) < 32:
+        raise HTTPException(status_code=503, detail="KIVYA API authentication is not configured")
+    supplied = credentials.credentials if credentials else ""
+    if not supplied or not secrets.compare_digest(supplied, configured):
+        raise HTTPException(
+            status_code=401,
+            detail="Valid Bearer token required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return "authenticated"
 
 _RATE_LOCK = threading.Lock()
 _REQUESTS: dict[str, deque[float]] = defaultdict(deque)
@@ -70,11 +88,14 @@ def health():
 
 
 @app.post("/v1/chat", response_model=ChatResponse)
-def chat(payload: ChatRequest, request: Request):
-    # Render runs behind a proxy. Prefer the first forwarded client IP so
-    # unrelated mobile users are not all throttled as one shared proxy address.
-    forwarded_for = request.headers.get("x-forwarded-for", "").split(",")[0].strip()
-    client_ip = forwarded_for or (request.client.host if request.client else "unknown")
+def chat(
+    payload: ChatRequest,
+    request: Request,
+    _principal: str = Depends(require_api_token),
+):
+    # Do not trust arbitrary X-Forwarded-For values: clients can spoof them.
+    # Configure trusted proxy handling at the hosting layer if proxy-aware IPs are needed.
+    client_ip = request.client.host if request.client else "unknown"
     enforce_rate_limit(client_ip)
 
     if not GEMINI_API_KEY:
@@ -101,9 +122,9 @@ def chat(payload: ChatRequest, request: Request):
         interaction = client.interactions.create(
             model=GEMINI_MODEL,
             input=(
-            "Recent conversation context (may be incomplete):\\n"
-            + "\\n".join(item[:1000] for item in payload.history[-12:])
-            + "\\n\\nCurrent user message:\\n"
+            "Recent conversation context (may be incomplete):\n"
+            + "\n".join(item[:1000] for item in payload.history[-12:])
+            + "\n\nCurrent user message:\n"
             + payload.message
         ),
             system_instruction=system_instruction,
