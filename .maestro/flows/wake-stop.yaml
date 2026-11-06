@@ -1,6 +1,9 @@
 appId: com.aarya.kivya
 ---
-- tapOn: "STOP WAKE WORD"
-- assertVisible:
-    text: "HEY KIVYA"
-    timeout: 10000
+- launchApp
+- swipe:
+    direction: DOWN
+    duration: 500
+- assertVisible: "KIVYA is listening"
+- tapOn: "Stop"
+- assertNotVisible: "KIVYA is listening"
