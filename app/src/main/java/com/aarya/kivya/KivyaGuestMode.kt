@@ -72,6 +72,8 @@ class GuestSessionStore(context: Context) {
 data class KivyaRemoteMessage(val role: String, val content: String)
 
 class KivyaApiClient(private val store: GuestSessionStore) {
+    @Volatile private var activeConversationId: String? = null
+
     companion object {
         private const val BASE_URL = "https://kivya-gemini-api.onrender.com"
     }
@@ -117,9 +119,11 @@ class KivyaApiClient(private val store: GuestSessionStore) {
 
     fun sendMessage(message: String, conversationId: String?): Pair<String, String> {
         val body = JSONObject().put("message", message).put("language", "auto")
-        if (!conversationId.isNullOrBlank()) body.put("conversation_id", conversationId)
+        val selectedId = conversationId ?: activeConversationId
+        if (!selectedId.isNullOrBlank()) body.put("conversation_id", selectedId)
         val response = JSONObject(requestText("/v1/chat", "POST", body))
-        return response.optString("reply") to response.optString("conversation_id")
+        activeConversationId = response.optString("conversation_id").ifBlank { null }
+        return response.optString("reply") to (activeConversationId ?: "")
     }
 
     fun fetchLatestHistory(): List<KivyaRemoteMessage> {
@@ -127,6 +131,7 @@ class KivyaApiClient(private val store: GuestSessionStore) {
         if (conversations.length() == 0) return emptyList()
         val id = conversations.getJSONObject(0).optString("id")
         if (id.isBlank()) return emptyList()
+        activeConversationId = id
         val messages = JSONArray(requestText("/v1/conversations/$id/messages"))
         return (0 until messages.length()).mapNotNull { index ->
             val item = messages.optJSONObject(index) ?: return@mapNotNull null
