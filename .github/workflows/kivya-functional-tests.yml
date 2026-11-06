@@ -84,20 +84,27 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           sdkmanager --install "platform-tools" "emulator" "system-images;android-34;google_apis;x86_64"
           # setup-android adds platform-tools to PATH, but not always the emulator binary directory.
           echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
           export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           test -x "$ANDROID_HOME/emulator/emulator"
           test -x "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" || command -v avdmanager
-          echo "no" | avdmanager create avd --force -n kivya-api34 -k "system-images;android-34;google_apis;x86_64" -d pixel_2
+          printf 'no\n' | avdmanager create avd --force -n kivya-api34 -k "system-images;android-34;google_apis;x86_64" -d pixel_2
+          test -s "$ANDROID_AVD_HOME/kivya-api34.ini"
+          test -d "$ANDROID_AVD_HOME/kivya-api34.avd"
+          avdmanager list avd
           "$ANDROID_HOME/emulator/emulator" -version
 
       - name: Boot Android emulator
         shell: bash
         run: |
           set -euo pipefail
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
           export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
+          test -s "$ANDROID_AVD_HOME/kivya-api34.ini"
           test -x "$ANDROID_HOME/emulator/emulator"
           nohup "$ANDROID_HOME/emulator/emulator" -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
           echo $! > /tmp/kivya-emulator.pid
