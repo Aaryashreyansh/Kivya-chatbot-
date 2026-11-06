@@ -551,6 +551,66 @@ private fun KivyaHome(
     }
 
     val scope = rememberCoroutineScope()
+    val guestStore = remember { GuestSessionStore(context.applicationContext) }
+    val guestApi = remember { KivyaApiClient(guestStore) }
+    var guestReady by remember { mutableStateOf(false) }
+    var guestBusy by remember { mutableStateOf(false) }
+    var guestStatus by remember { mutableStateOf("Guest Mode तैयार हो रहा है...") }
+    var remoteConversationId by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(Unit) {
+        guestBusy = true
+        try {
+            withContext(Dispatchers.IO) { guestApi.ensureGuest() }
+            guestReady = true
+            guestStatus = "Guest Mode सक्रिय · सुरक्षित session"
+            val remote = withContext(Dispatchers.IO) { guestApi.fetchLatestHistory() }
+            if (remote.isNotEmpty()) {
+                chat.clear()
+                remote.forEach { item ->
+                    val label = if (item.role == "user") "तुम" else "KIVYA"
+                    chat.add("$label: ${item.content}")
+                }
+                saveMemory()
+            }
+        } catch (e: Exception) {
+            guestStatus = "Guest Mode offline: ${e.message ?: "Server उपलब्ध नहीं"}"
+        } finally {
+            guestBusy = false
+        }
+    }
+
+    fun logoutGuest() {
+        scope.launch {
+            guestBusy = true
+            try {
+                withContext(Dispatchers.IO) { guestApi.logout() }
+                guestReady = false
+                remoteConversationId = null
+                guestStatus = "Logout हो गया। अगली बार Guest Mode दोबारा शुरू होगा।"
+            } catch (e: Exception) {
+                guestStatus = "Logout error: ${e.message ?: "फिर कोशिश करें"}"
+            } finally { guestBusy = false }
+        }
+    }
+
+    fun deleteGuestData() {
+        scope.launch {
+            guestBusy = true
+            try {
+                withContext(Dispatchers.IO) { guestApi.deleteGuestData() }
+                memory.forgetHistory()
+                memory.forgetNotes()
+                chat.clear()
+                chat.add("KIVYA: Guest data delete कर दिया गया।")
+                remoteConversationId = null
+                guestReady = false
+                guestStatus = "Guest data और cloud history delete हो गए।"
+            } catch (e: Exception) {
+                guestStatus = "Delete error: ${e.message ?: "फिर कोशिश करें"}"
+            } finally { guestBusy = false }
+        }
+    }
 
     fun process(text: String) {
         prompt = text
@@ -690,41 +750,17 @@ private fun KivyaHome(
                     }
                 } else withContext(Dispatchers.IO) {
                     try {
-                        val connection = (URL("https://kivya-gemini-api.onrender.com/v1/chat").openConnection() as HttpURLConnection).apply {
-                            requestMethod = "POST"
-                            connectTimeout = 20000
-                            readTimeout = 60000
-                            doOutput = true
-                            setRequestProperty("Content-Type", "application/json; charset=utf-8")
-                        }
-                        try {
-                            val history = JSONArray()
-                            chat.takeLast(12).forEach { line -> history.put(line.take(1000)) }
-                            memory.loadNotes().takeLast(10).forEach { note ->
-                                history.put("KIVYA saved user note: " + note.take(500))
-                            }
-                            val body = JSONObject()
-                                .put("message", text)
-                                .put("language", "auto")
-                                .put("history", history)
-                                .toString()
-                            connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-                            val status = connection.responseCode
-                            val stream = if (status in 200..299) connection.inputStream else connection.errorStream
-                            val raw = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
-                            val json = JSONObject(raw.ifBlank { "{}" })
-                            if (status in 200..299) json.optString("reply").ifBlank { "Gemini से खाली जवाब मिला।" }
-                            else json.optString("detail").ifBlank { "Server error ($status). थोड़ी देर बाद कोशिश करें।" }
-                        } finally {
-                            connection.disconnect()
-                        }
+                        if (!guestReady) guestApi.ensureGuest()
+                        val result = guestApi.sendMessage(text, remoteConversationId)
+                        remoteConversationId = result.second
+                        result.first.ifBlank { "Gemini से खाली जवाब मिला।" }
                     } catch (_: Exception) {
                         if (offlineChat.isReady()) {
                             try { offlineChat.reply(text) } catch (_: Exception) {
                                 "Server और Offline AI दोनों अभी उपलब्ध नहीं हैं।"
                             }
                         } else {
-                            "Server उपलब्ध नहीं है। Offline AI डाउनलोड करने के लिए नीचे बटन दबाएँ।"
+                            "Guest server उपलब्ध नहीं है। Offline AI डाउनलोड करके बिना इंटरनेट बात कर सकते हैं।"
                         }
                     }
                 }
@@ -775,6 +811,28 @@ private fun KivyaHome(
                             Box(Modifier.size(6.dp).background(Aqua, CircleShape))
                             Spacer(Modifier.width(6.dp))
                             Text("AI", color = Aqua, fontSize = 10.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.sp)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Panel,
+                    shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Aqua.copy(alpha = .25f))
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("GUEST MODE · SECURITY", color = Aqua, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text(guestStatus, color = Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 9.dp)) {
+                            OutlinedButton(enabled = !guestBusy, modifier = Modifier.weight(1f), onClick = { logoutGuest() }) {
+                                Text("LOGOUT", fontSize = 10.sp)
+                            }
+                            OutlinedButton(enabled = !guestBusy, modifier = Modifier.weight(1f), onClick = { deleteGuestData() },
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFFFF8292))) {
+                                Text("DELETE DATA", fontSize = 10.sp)
+                            }
                         }
                     }
                 }
