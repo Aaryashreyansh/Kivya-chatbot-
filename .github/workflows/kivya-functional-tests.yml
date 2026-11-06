@@ -75,6 +75,11 @@ jobs:
           # The legacy 'tools' package is no longer published by Google.
           packages: 'platform-tools'
 
+      - name: Install Linux libraries required by Android emulator
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes libpulse0 libnss3 libxcomposite1 libxcursor1 libxdamage1 libxi6 libxtst6 libxrandr2 libxrender1 libxss1 libasound2t64
+
       - name: Install Android emulator packages
         shell: bash
         run: |
