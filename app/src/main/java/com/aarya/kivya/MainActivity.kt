@@ -513,7 +513,6 @@ private fun KivyaHome(
     var prompt by remember { mutableStateOf("") }
     var response by remember { mutableStateOf("हेलो आर्या, स्वागत है। मैं KIVYA हूँ। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?") }
     var listening by remember { mutableStateOf(false) }
-    var wakeEnabled by remember { mutableStateOf(false) }
     val offlineChat = remember { KivyaOfflineChat(context.applicationContext) }
     var offlineReady by remember { mutableStateOf(offlineChat.isModelDownloaded()) }
     var offlineBusy by remember { mutableStateOf(false) }
@@ -528,13 +527,26 @@ private fun KivyaHome(
                     context,
                     Intent(context, KivyaWakeWordService::class.java).setAction(KivyaWakeWordService.ACTION_START)
                 )
-                wakeEnabled = true
-                response = "Hey KIVYA wake-word listening चालू है। बंद करने के लिए Stop दबाएँ।"
+                response = "KIVYA का wake-word listener चालू है। इसे notification से बंद किया जा सकता है।"
             } catch (_: Exception) {
                 response = "Wake-word service शुरू नहीं हो पाई। Notification और microphone permission जाँचें।"
             }
         } else {
             response = "Wake Word के लिए microphone permission जरूरी है।"
+        }
+    }
+    LaunchedEffect(Unit) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, KivyaWakeWordService::class.java).setAction(KivyaWakeWordService.ACTION_START)
+                )
+            } catch (_: Exception) {
+                response = "Wake-word service शुरू नहीं हो पाई। Notification और microphone permission जाँचें।"
+            }
+        } else {
+            wakeMicPermission.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
     val memory = remember { KivyaMemory(context) }
@@ -801,23 +813,6 @@ private fun KivyaHome(
                     QuickAction("Settings", Icons.Default.Settings, Modifier.weight(1f)) { process("Settings खोलो") }
                 }
 
-                Spacer(Modifier.height(12.dp))
-                Button(
-                    onClick = {
-                        if (wakeEnabled) {
-                            context.startService(Intent(context, KivyaWakeWordService::class.java).setAction(KivyaWakeWordService.ACTION_STOP))
-                            wakeEnabled = false
-                            response = "Hey KIVYA wake-word listening बंद कर दी।"
-                        } else {
-                            wakeMicPermission.launch(Manifest.permission.RECORD_AUDIO)
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    shape = RoundedCornerShape(15.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = if (wakeEnabled) Color(0xFFB45B72) else Color(0xFF203B55))
-                ) {
-                    Text(if (wakeEnabled) "STOP WAKE WORD" else "HEY KIVYA", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                }
                 Spacer(Modifier.height(12.dp))
                 Surface(color = Panel, shape = RoundedCornerShape(16.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Aqua.copy(alpha = .25f)),
