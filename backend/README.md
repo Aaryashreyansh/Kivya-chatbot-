@@ -1,73 +1,69 @@
-# KIVYA AI backend
+# KIVYA Backend
 
-FastAPI backend for KIVYA using Google's Gemini Interactions API, Gemini 3.8 Flash,
-medium thinking, and the built-in Google Search tool.
+FastAPI service for KIVYA's online AI mode. Wake-word detection and offline inference stay on the Android device; the backend is not in the microphone/audio path.
+
+## Current API
+
+- `GET /health`: public liveness/configuration summary. Does not expose secrets.
+- `POST /v1/chat`: authenticated Gemini chat endpoint.
+- Request: `{"message":"नमस्ते","language":"hi","history":[]}`
+- Header: `Authorization: Bearer <KIVYA_API_TOKEN>`
+
+Supported languages: `hi`, `en`, `auto`. Message length is capped at 6,000 characters and the optional context list at 12 entries. Server output tokens are clamped to 64–1,200. The API never returns provider exception text or credentials.
 
 ## Configuration
 
-Set these environment variables in the hosting platform's secret/configuration
-manager. Never commit a .env file or put secrets in the Android APK.
+Set secrets in the hosting platform's secret manager, not in Git or the Android APK:
 
-- GEMINI_API_KEY: API key created in Google AI Studio. Store as a secret.
-- KIVYA_API_TOKEN: a separate, long random token used by the Android app to
-  authenticate with this backend. Store as a secret.
-- GEMINI_MODEL: optional; defaults to gemini-3.8-flash.
-- MAX_OUTPUT_TOKENS: optional; defaults to 1200 and is capped at 4096 to limit
-  response size and unexpected usage.
-- GEMINI_TIMEOUT_SECONDS: optional; defaults to 45 seconds.
-- CORS_ORIGINS: optional comma-separated trusted web origins.
+- `GEMINI_API_KEY`: Google AI Studio API key.
+- `KIVYA_API_TOKEN`: random server access token, at least 32 characters.
+- `GEMINI_MODEL`: optional model override; current default is `gemini-3.8-flash`.
+- `GEMINI_TIMEOUT_SECONDS`: optional request timeout (5–90 seconds).
+- `MAX_OUTPUT_TOKENS`: optional response cap (64–1,200).
+- `CORS_ORIGINS`: optional comma-separated trusted browser origins.
 
-## Gemini capabilities
+If `KIVYA_API_TOKEN` is absent or shorter than 32 characters, chat requests fail closed with HTTP 503. Missing/invalid bearer tokens receive HTTP 401. Use HTTPS only.
 
-- Uses the Interactions API: `client.interactions.create(...)`.
-- Enables live web grounding through `tools=[{"type": "google_search"}]`.
-- Sets `thinking_level` to `medium`.
-- Uses `interaction.output_text` for the final answer.
-- Google Search is available to the model when useful; it is not forced for
-  every request.
+**Important deployment note:** a shared bearer token embedded in a public APK can be extracted. This initial gate is suitable for server-side testing and controlled integration, not a final multi-user identity system. Before public release, replace it with per-user/device credentials (short-lived access tokens, refresh/revocation, and server-side authorization). Do not ship the shared token in the app.
 
-## Free-tier and cost safeguards
+## Cost and privacy safeguards
 
-- Confirm the selected model and Google Search grounding are available to the
-  Google AI Studio project and check its current quotas before use.
-- Free-tier eligibility, model access, and search/tool quotas vary by project
-  and can change. Do not assume all requests will be free.
-- Do not link a billing account if the intention is to avoid paid Gemini API
-  usage. If a quota is exhausted, the endpoint returns HTTP 429 and does not
-  switch to a paid model or paid provider.
-- Review the current model availability, rate limits, and terms in Google AI
-  Studio before enabling the key.
-- The Gemini API Free Tier may use submitted prompts and responses to improve
-  Google's products. Do not send passwords, personal contact details, private
-  messages, or other sensitive information to this endpoint.
-- AWS hosting is separate from Gemini API usage and can still incur AWS charges.
-  Do not deploy billable AWS resources until the account owner/guardian approves
-  the service and its spending.
+- Google model and Search tool quotas, availability, and billing vary by project. Verify them in Google AI Studio before deployment.
+- A quota/provider rate-limit response is mapped to HTTP 429; the service does not silently switch to a paid provider.
+- Gemini API data handling depends on the account's tier and terms. Do not send passwords, private messages, or sensitive personal data.
+- AWS hosting can incur separate charges. Do not create billable AWS resources without the account owner's approval.
+- The backend does not execute phone actions, access contacts, initiate calls, or control the device.
 
-## Security
+## Local development
 
-- Keep GEMINI_API_KEY and KIVYA_API_TOKEN in AWS Secrets Manager or the
-  hosting platform's secret manager, never in source code, GitHub, logs, or APK.
-- The previously pasted API key must be revoked and must not be reused.
-- Use HTTPS and restrict access to the backend.
-- Use a strong KIVYA_API_TOKEN; the Android app sends it as a Bearer token.
-- Native Android is not governed by browser CORS.
-- The endpoint only answers chat requests. It does not execute phone actions,
-  access contacts, make calls, or run shell/GitHub/AWS operations.
+```bash
+cd backend
+python -m venv .venv
+# Activate the environment, then:
+pip install -r requirements.txt
+export GEMINI_API_KEY="..."
+export KIVYA_API_TOKEN="$(python -c 'import secrets; print(secrets.token_urlsafe(48))')"
+uvicorn main:app --host 127.0.0.1 --port 8000
+```
 
-## Run locally
+Health: `curl http://127.0.0.1:8000/health`
 
-1. Create a Python virtual environment.
-2. Install dependencies: `pip install -r requirements.txt`.
-3. Set GEMINI_API_KEY and KIVYA_API_TOKEN in your local environment.
-4. Start from this directory:
-   `uvicorn main:app --host 127.0.0.1 --port 8000`
+Chat:
+```bash
+curl -X POST http://127.0.0.1:8000/v1/chat \
+  -H "Authorization: Bearer $KIVYA_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"message":"नमस्ते","language":"hi","history":[]}'
+```
 
-Health check: GET /health
+Run tests from the repository root:
 
-Chat: POST /v1/chat with JSON
-`{"message":"नमस्ते","language":"hi"}` and header
-`Authorization: Bearer <your-token>`.
+```bash
+pytest -q backend/tests
+```
 
-The Android app still needs its API client and configured HTTPS backend URL
-before AI Studio mode can call this endpoint.
+## Architecture boundary
+
+- **Android device:** `Hey KIVYA` wake-word, microphone capture, foreground-service notification, Single Command and Continuous Conversation modes, and offline local model inference.
+- **Backend:** authenticated online chat, provider integration, quotas/rate limits, and (next phase) durable user-scoped conversation storage.
+- Wake-word audio is not uploaded to this API.
