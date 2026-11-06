@@ -15,7 +15,8 @@ permissions:
 # sessions from exhausting runner resources and killing Maestro's device server.
 concurrency:
   group: kivya-maestro-ui
-  cancel-in-progress: true
+  # Do not kill an active emulator boot when another UI run is queued.
+  cancel-in-progress: false
 
 jobs:
   maestro-smoke-test:
