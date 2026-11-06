@@ -85,9 +85,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          nohup emulator -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -wipe-data > /tmp/kivya-emulator.log 2>&1 &
+          nohup emulator -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
           echo $! > /tmp/kivya-emulator.pid
-          adb wait-for-device
+          if ! timeout 180s adb wait-for-device; then
+            echo "ADB did not detect the emulator within 3 minutes."
+            adb devices -l || true
+            tail -n 200 /tmp/kivya-emulator.log || true
+            exit 1
+          fi
           booted=false
           for attempt in $(seq 1 120); do
             state="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')"
