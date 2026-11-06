@@ -89,6 +89,8 @@ class MainActivity : ComponentActivity() {
     private var pendingContactName: String? = null
     private var pendingCallNumber: String? = null
     private var pendingMessageCommand: String? = null
+    // Incremented for every wake-word event, including when this Activity is already open.
+    private var wakeWordEvent by mutableIntStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -119,7 +121,20 @@ class MainActivity : ComponentActivity() {
             }
         }
         if (SpeechRecognizer.isRecognitionAvailable(this)) speech = SpeechRecognizer.createSpeechRecognizer(this)
-        setContent { KivyaHome(::startListening, ::say, ::phoneAction) }
+        if (intent?.getBooleanExtra(KivyaWakeWordService.EXTRA_WAKE_WORD, false) == true) {
+            intent.removeExtra(KivyaWakeWordService.EXTRA_WAKE_WORD)
+            wakeWordEvent++
+        }
+        setContent { KivyaHome(::startListening, ::say, ::phoneAction, wakeWordEvent) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(KivyaWakeWordService.EXTRA_WAKE_WORD, false)) {
+            intent.removeExtra(KivyaWakeWordService.EXTRA_WAKE_WORD)
+            wakeWordEvent++
+        }
     }
 
     private fun findContactNumbers(rawName: String): List<String> {
@@ -506,7 +521,8 @@ class MainActivity : ComponentActivity() {
 private fun KivyaHome(
     listen: ((String) -> Unit, (String) -> Unit) -> Unit,
     speak: (String) -> Unit,
-    phoneAction: (String) -> String
+    phoneAction: (String) -> String,
+    wakeWordEvent: Int
 ) {
     val context = LocalContext.current
     var mode by remember { mutableStateOf("Phone") }
@@ -719,12 +735,17 @@ private fun KivyaHome(
                             connection.disconnect()
                         }
                     } catch (_: Exception) {
-                        if (offlineChat.isReady()) {
-                            try { offlineChat.reply(text) } catch (_: Exception) {
-                                "Server और Offline AI दोनों अभी उपलब्ध नहीं हैं।"
+                        if (offlineChat.isReady() || offlineChat.isModelDownloaded()) {
+                            try {
+                                // A downloaded model may not yet be loaded after an app restart.
+                                // Load it lazily on the first network failure, then answer locally.
+                                if (!offlineChat.isReady()) offlineChat.installAndLoad { }
+                                offlineChat.reply(text)
+                            } catch (offlineError: Exception) {
+                                "Online server और Offline AI दोनों उपलब्ध नहीं हैं: ${offlineError.message ?: "मॉडल शुरू नहीं हो पाया।"}"
                             }
                         } else {
-                            "Server उपलब्ध नहीं है। Offline AI डाउनलोड करने के लिए नीचे बटन दबाएँ।"
+                            "Server उपलब्ध नहीं है। एक बार Offline AI डाउनलोड करें, फिर बिना इंटरनेट भी जवाब मिल सकेगा।"
                         }
                     }
                 }
@@ -736,16 +757,21 @@ private fun KivyaHome(
         }
     }
 
-    LaunchedEffect(Unit) {
-        val activity = context as? MainActivity
-        if (activity?.intent?.getBooleanExtra(KivyaWakeWordService.EXTRA_WAKE_WORD, false) == true) {
-            activity.intent.removeExtra(KivyaWakeWordService.EXTRA_WAKE_WORD)
-            delay(500)
-            listening = true
-            listen(
-                { words -> listening = false; process(words) },
-                { error -> listening = false; response = error }
-            )
+    LaunchedEffect(wakeWordEvent) {
+        if (wakeWordEvent > 0) {
+            // Give the Activity a moment to become resumed before opening the speech session.
+            delay(350)
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                listening = true
+                response = "KIVYA जाग गई। बोलिए।"
+                listen(
+                    { words -> listening = false; process(words) },
+                    { error -> listening = false; response = error }
+                )
+            } else {
+                listening = false
+                response = "Wake word सुन लिया, लेकिन microphone permission नहीं है। TALK TO KIVYA दबाकर अनुमति दें।"
+            }
         }
     }
 
