@@ -98,6 +98,18 @@ jobs:
           avdmanager list avd
           "$ANDROID_HOME/emulator/emulator" -version
 
+      - name: Enable KVM hardware acceleration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -e /dev/kvm ]; then
+            echo "KVM device is not available on this runner."
+            exit 1
+          fi
+          sudo chmod 666 /dev/kvm
+          ls -l /dev/kvm
+          test -r /dev/kvm && test -w /dev/kvm
+
       - name: Boot Android emulator
         shell: bash
         run: |
@@ -106,7 +118,7 @@ jobs:
           export PATH="$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH"
           test -s "$ANDROID_AVD_HOME/kivya-api34.ini"
           test -x "$ANDROID_HOME/emulator/emulator"
-          nohup "$ANDROID_HOME/emulator/emulator" -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel off -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
+          nohup "$ANDROID_HOME/emulator/emulator" -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
           echo $! > /tmp/kivya-emulator.pid
           if ! timeout 180s adb wait-for-device; then
             echo "ADB did not detect the emulator within 3 minutes."
