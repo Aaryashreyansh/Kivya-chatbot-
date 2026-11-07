@@ -12,6 +12,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.k2fsa.sherpa.onnx.FeatureConfig
@@ -30,6 +31,7 @@ class KivyaWakeWordService : Service() {
     private var recorder: AudioRecord? = null
     private var worker: Thread? = null
     private var spotter: KeywordSpotter? = null
+    private var cpuWakeLock: PowerManager.WakeLock? = null
     @Volatile private var lastTriggerAt = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -62,10 +64,20 @@ class KivyaWakeWordService : Service() {
                 NotificationChannel(CHANNEL_ID, "KIVYA Wake Word", NotificationManager.IMPORTANCE_LOW)
             )
         }
+        val openKivya = PendingIntent.getActivity(
+            this,
+            4203,
+            Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                putExtra(EXTRA_WAKE_WORD, true)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("KIVYA is listening")
-            .setContentText("Wake-word detection is active. Use Stop here to turn it off.")
+            .setContentText("Wake phrase detection is active. Tap to open KIVYA or Stop to pause.")
+            .setContentIntent(openKivya)
             .addAction(
                 android.R.drawable.ic_media_pause,
                 "Stop",
@@ -117,6 +129,7 @@ class KivyaWakeWordService : Service() {
         require(audio.state == AudioRecord.STATE_INITIALIZED) { "Microphone could not be initialized" }
         recorder = audio
         audio.startRecording()
+        acquireCpuWakeLock()
         running = true
         worker = thread(name = "KIVYA-WakeWord") {
             val shortBuffer = ShortArray(SAMPLE_RATE / 10)
@@ -157,8 +170,28 @@ class KivyaWakeWordService : Service() {
                 spotter = null
                 recorder = null
                 running = false
+                releaseCpuWakeLock()
                 stopSelf()
             }
+        }
+    }
+
+    private fun acquireCpuWakeLock() {
+        synchronized(this) {
+            val manager = getSystemService(POWER_SERVICE) as PowerManager
+            val lock = cpuWakeLock ?: manager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "$packageName:KIVYA-WakeWord"
+            ).also { cpuWakeLock = it }
+            if (!lock.isHeld) lock.acquire()
+        }
+    }
+
+    private fun releaseCpuWakeLock() {
+        synchronized(this) {
+            val lock = cpuWakeLock
+            cpuWakeLock = null
+            if (lock?.isHeld == true) lock.release()
         }
     }
 
@@ -168,6 +201,7 @@ class KivyaWakeWordService : Service() {
         worker?.interrupt()
         worker = null
         recorder = null
+        releaseCpuWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
