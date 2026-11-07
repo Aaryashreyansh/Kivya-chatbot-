@@ -128,6 +128,14 @@ jobs:
           adb shell dumpsys activity services com.aarya.kivya | grep -F "KivyaWakeWordService"
           echo "PASS: wake-word foreground service starts with microphone permission and packaged model assets" >> test-results/results.txt
 
+          adb shell input keyevent 26
+          sleep 3
+          adb shell dumpsys power | grep -F "KIVYA-WakeWord"
+          adb shell dumpsys activity services com.aarya.kivya | grep -F "KivyaWakeWordService"
+          adb shell input keyevent 26
+          sleep 2
+          echo "PASS: wake-word service retains a CPU wake lock while the emulator screen is off" >> test-results/results.txt
+
           maestro test .maestro/flows/wake-stop.yaml
           sleep 2
           if adb shell dumpsys activity services com.aarya.kivya | grep -F "KivyaWakeWordService" | grep -q "isForeground=true"; then
