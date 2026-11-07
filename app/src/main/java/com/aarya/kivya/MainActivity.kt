@@ -97,6 +97,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val launchedByWakeWord = intent?.getBooleanExtra(KivyaWakeWordService.EXTRA_WAKE_WORD, false) == true
         contactsPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             val name = pendingContactName
             val messageCommand = pendingMessageCommand
@@ -120,11 +121,11 @@ class MainActivity : ComponentActivity() {
                 tts?.language = Locale("hi", "IN")
                 tts?.setSpeechRate(0.96f)
                 tts?.setPitch(1.04f)
-                say("हेलो आर्या, स्वागत है। मैं किव्या हूँ। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?")
+                if (!launchedByWakeWord) say("हेलो आर्या, स्वागत है। मैं किव्या हूँ। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?")
             }
         }
         if (SpeechRecognizer.isRecognitionAvailable(this)) speech = SpeechRecognizer.createSpeechRecognizer(this)
-        if (intent?.getBooleanExtra(KivyaWakeWordService.EXTRA_WAKE_WORD, false) == true) {
+        if (launchedByWakeWord) {
             intent.removeExtra(KivyaWakeWordService.EXTRA_WAKE_WORD)
             wakeEvents.trySend(Unit)
         }
@@ -138,11 +139,6 @@ class MainActivity : ComponentActivity() {
             intent.removeExtra(KivyaWakeWordService.EXTRA_WAKE_WORD)
             wakeEvents.trySend(Unit)
         }
-    }
-
-    override fun onDestroy() {
-        wakeEvents.close()
-        super.onDestroy()
     }
 
     private fun findContactNumbers(rawName: String): List<String> {
@@ -519,6 +515,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        wakeEvents.close()
         speech?.destroy()
         tts?.shutdown()
         super.onDestroy()
