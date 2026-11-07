@@ -57,7 +57,7 @@ class KivyaWakeWordService : Service() {
         return START_STICKY
     }
 
-    private fun buildNotification(): Notification {
+    private fun buildNotification(message: String = "Wake phrase detection is active. Tap to open KIVYA or Stop to pause."): Notification {
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(
@@ -76,7 +76,7 @@ class KivyaWakeWordService : Service() {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("KIVYA is listening")
-            .setContentText("Wake phrase detection is active. Tap to open KIVYA or Stop to pause.")
+            .setContentText(message)
             .setContentIntent(openKivya)
             .addAction(
                 android.R.drawable.ic_media_pause,
@@ -148,6 +148,10 @@ class KivyaWakeWordService : Service() {
                                 if (now - lastTriggerAt < 4000L) continue
                                 lastTriggerAt = now
                                 Log.i(TAG, "Wake word detected")
+                                getSystemService(NotificationManager::class.java).notify(
+                                    NOTIFICATION_ID,
+                                    buildNotification("Wake phrase detected. Tap to speak or Stop to pause.")
+                                )
                                 val launch = Intent(this, MainActivity::class.java).apply {
                                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                                     putExtra(EXTRA_WAKE_WORD, true)
