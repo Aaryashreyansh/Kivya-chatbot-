@@ -156,7 +156,11 @@ class KivyaWakeWordService : Service() {
                                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                                     putExtra(EXTRA_WAKE_WORD, true)
                                 }
-                                startActivity(launch)
+                                try {
+                                    startActivity(launch)
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Activity launch was blocked; notification tap remains available", e)
+                                }
                             }
                         }
                     } else if (count < 0) {
