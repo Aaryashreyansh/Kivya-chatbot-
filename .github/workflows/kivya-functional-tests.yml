@@ -78,14 +78,30 @@ jobs:
       - name: Install Android emulator packages
         shell: bash
         run: |
-          sdkmanager --install "platform-tools" "emulator" "system-images;android-34;google_apis;x86_64"
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:?Android SDK path is not set}}"
+          echo "Using Android SDK at: $SDK_ROOT"
+          sdkmanager --sdk_root="$SDK_ROOT" --install "platform-tools" "emulator" "system-images;android-34;google_apis;x86_64"
+          echo "$SDK_ROOT/emulator" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          echo "Installed emulator package:"
+          sdkmanager --sdk_root="$SDK_ROOT" --list_installed | grep -E "emulator|platform-tools|system-images;android-34"
+          if [ ! -x "$SDK_ROOT/emulator/emulator" ]; then
+            echo "ERROR: Android emulator package was requested but $SDK_ROOT/emulator/emulator is missing."
+            find "$SDK_ROOT" -maxdepth 3 -type f -name emulator -print || true
+            exit 1
+          fi
+          "$SDK_ROOT/emulator/emulator" -version
           echo "no" | avdmanager create avd --force -n kivya-api34 -k "system-images;android-34;google_apis;x86_64" -d pixel_2
 
       - name: Boot Android emulator
         shell: bash
         run: |
           set -euo pipefail
-          nohup emulator -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:?Android SDK path is not set}}"
+          export PATH="$SDK_ROOT/emulator:$SDK_ROOT/platform-tools:$PATH"
+          test -x "$SDK_ROOT/emulator/emulator"
+          nohup "$SDK_ROOT/emulator/emulator" -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
           echo $! > /tmp/kivya-emulator.pid
           if ! timeout 180s adb wait-for-device; then
             echo "ADB did not detect the emulator within 3 minutes."
