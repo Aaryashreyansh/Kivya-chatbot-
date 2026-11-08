@@ -79,6 +79,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y libpulse0 libx11-6 libnss3 libxcomposite1 libxcursor1 libxi6 libxtst6 libxrandr2 libasound2t64 || sudo apt-get install -y libpulse0 libx11-6 libnss3 libxcomposite1 libxcursor1 libxi6 libxtst6 libxrandr2 libasound2
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:?Android SDK path is not set}}"
           echo "Using Android SDK at: $SDK_ROOT"
           sdkmanager --sdk_root="$SDK_ROOT" --install "platform-tools" "emulator" "system-images;android-34;google_apis;x86_64"
