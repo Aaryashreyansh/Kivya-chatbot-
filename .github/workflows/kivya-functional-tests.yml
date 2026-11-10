@@ -116,7 +116,23 @@ jobs:
           test -x "$SDK_ROOT/emulator/emulator"
           test -s "$ANDROID_AVD_HOME/kivya-api34.ini"
           "$SDK_ROOT/emulator/emulator" -list-avds
-          nohup "$SDK_ROOT/emulator/emulator" -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
+
+          # GitHub-hosted Linux runners may expose /dev/kvm without granting
+          # the runner user access. Fix permissions when possible; otherwise
+          # explicitly fall back to software CPU emulation.
+          ACCEL_MODE=off
+          if [ -e /dev/kvm ]; then
+            sudo chmod 666 /dev/kvm || true
+            if [ -r /dev/kvm ] && [ -w /dev/kvm ]; then
+              ACCEL_MODE=on
+            fi
+          fi
+          echo "Android Emulator acceleration mode: $ACCEL_MODE"
+          if [ "$ACCEL_MODE" = "off" ]; then
+            echo "KVM is unavailable to this runner; using slower software emulation."
+          fi
+
+          nohup "$SDK_ROOT/emulator/emulator" -avd kivya-api34 -accel "$ACCEL_MODE" -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
           echo $! > /tmp/kivya-emulator.pid
           if ! timeout 180s adb wait-for-device; then
             echo "ADB did not detect the emulator within 3 minutes."
