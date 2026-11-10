@@ -162,15 +162,30 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p test-results
+
+          # Maestro's Android device-server can occasionally disconnect during
+          # first startup on software-rendered GitHub-hosted emulators. Retry
+          # once after reconnecting ADB; do not hide a persistent test failure.
+          run_maestro() {
+            local flow="$1"
+            if maestro test "$flow"; then
+              return 0
+            fi
+            echo "Maestro flow failed once: $flow. Reconnecting ADB and retrying."
+            adb reconnect || true
+            timeout 30s adb wait-for-device
+            sleep 5
+            maestro test "$flow"
+          }
           adb install -r app/build/outputs/apk/debug/app-debug.apk
           adb shell pm grant com.aarya.kivya android.permission.RECORD_AUDIO
           adb shell pm grant com.aarya.kivya android.permission.POST_NOTIFICATIONS || true
           adb shell monkey -p com.aarya.kivya 1
           sleep 8
-          maestro test .maestro/flows/smoke.yaml
+          run_maestro .maestro/flows/smoke.yaml
           echo "PASS: app install, launch, and primary UI assertions" >> test-results/results.txt
 
-          maestro test .maestro/flows/wake-service.yaml
+          run_maestro .maestro/flows/wake-service.yaml
           sleep 3
           adb shell dumpsys activity services com.aarya.kivya | grep -F "KivyaWakeWordService"
           echo "PASS: wake-word foreground service starts with microphone permission and packaged model assets" >> test-results/results.txt
@@ -188,7 +203,7 @@ jobs:
           adb shell cmd statusbar expand-notifications
           sleep 2
           adb shell dumpsys notification --noredact | grep -F "KIVYA is listening"
-          maestro test .maestro/flows/wake-stop.yaml
+          run_maestro .maestro/flows/wake-stop.yaml
           adb shell cmd statusbar collapse
           sleep 2
           if adb shell dumpsys activity services com.aarya.kivya | grep -F "KivyaWakeWordService" | grep -q "isForeground=true"; then
@@ -198,10 +213,10 @@ jobs:
           echo "PASS: notification Stop action exits foreground wake-word mode" >> test-results/results.txt
 
           if [ "${{ inputs.run_offline_model_test }}" = "true" ]; then
-            maestro test .maestro/flows/offline-download.yaml
+            run_maestro .maestro/flows/offline-download.yaml
             adb shell svc wifi disable
             adb shell svc data disable
-            maestro test .maestro/flows/offline-reply.yaml
+            run_maestro .maestro/flows/offline-reply.yaml
             echo "PASS: offline model produced the expected marker with network disabled" >> test-results/results.txt
           else
             echo "NOT RUN: Qwen offline inference (opt-in; downloads approximately 347 MB)" >> test-results/results.txt
