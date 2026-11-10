@@ -14,7 +14,7 @@ on:
         type: boolean
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: kivya-functional-${{ github.ref }}
@@ -231,7 +231,7 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
-      - name: Upload installable debug APK
+      - name: Upload installable debug APK (Actions artifact)
         if: success()
         uses: actions/upload-artifact@v4
         with:
@@ -239,3 +239,18 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
+
+      # GitHub Actions artifacts are always downloaded as ZIP archives.
+      # Publish the same APK as a GitHub Release asset so Android users can
+      # download the .apk file directly, without extracting a ZIP.
+      - name: Publish direct APK download
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: kivya-build-${{ github.run_number }}
+          name: KIVYA APK build ${{ github.run_number }}
+          body: |
+            Installable KIVYA Android debug APK.
+            Download the .apk asset directly. No ZIP extraction is needed.
+          files: app/build/outputs/apk/debug/app-debug.apk
+          fail_on_unmatched_files: true
