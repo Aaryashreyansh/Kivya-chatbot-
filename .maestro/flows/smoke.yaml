@@ -9,4 +9,9 @@ appId: com.aarya.kivya
 - assertNotVisible: "STOP WAKE WORD"
 - assertVisible: "Message KIVYA..."
 - assertVisible: "TALK TO KIVYA"
+- scrollUntilVisible:
+    element:
+      text: "CONVERSATION"
+    direction: DOWN
+    timeout: 10000
 - assertVisible: "CONVERSATION"
