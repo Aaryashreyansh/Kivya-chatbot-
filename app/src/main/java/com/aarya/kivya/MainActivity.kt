@@ -72,6 +72,10 @@ import org.json.JSONArray
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.DisposableEffect
 
@@ -82,6 +86,8 @@ private val Blue = Color(0xFF6C8CFF)
 private val Muted = Color(0xFF91A2BA)
 
 class MainActivity : ComponentActivity() {
+    private val wakeEvents = Channel<Unit>(Channel.CONFLATED)
+    private val wakeEventsFlow = wakeEvents.receiveAsFlow()
     private var tts: TextToSpeech? = null
     private var speech: SpeechRecognizer? = null
     private lateinit var contactsPermissionLauncher: androidx.activity.result.ActivityResultLauncher<String>
@@ -92,6 +98,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val launchedByWakeWord = intent?.getBooleanExtra(KivyaWakeWordService.EXTRA_WAKE_WORD, false) == true
         contactsPermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             val name = pendingContactName
             val messageCommand = pendingMessageCommand
@@ -115,11 +122,24 @@ class MainActivity : ComponentActivity() {
                 tts?.language = Locale("hi", "IN")
                 tts?.setSpeechRate(0.96f)
                 tts?.setPitch(1.04f)
-                say("हेलो आर्या, स्वागत है। मैं किव्या हूँ। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?")
+                if (!launchedByWakeWord) say("हेलो आर्या, स्वागत है। मैं किव्या हूँ। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?")
             }
         }
         if (SpeechRecognizer.isRecognitionAvailable(this)) speech = SpeechRecognizer.createSpeechRecognizer(this)
-        setContent { KivyaHome(::startListening, ::say, ::phoneAction) }
+        if (launchedByWakeWord) {
+            intent.removeExtra(KivyaWakeWordService.EXTRA_WAKE_WORD)
+            wakeEvents.trySend(Unit)
+        }
+        setContent { KivyaHome(::startListening, ::say, ::phoneAction, wakeEventsFlow) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(KivyaWakeWordService.EXTRA_WAKE_WORD, false)) {
+            intent.removeExtra(KivyaWakeWordService.EXTRA_WAKE_WORD)
+            wakeEvents.trySend(Unit)
+        }
     }
 
     private fun findContactNumbers(rawName: String): List<String> {
@@ -496,6 +516,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        wakeEvents.close()
         speech?.destroy()
         tts?.shutdown()
         super.onDestroy()
@@ -506,14 +527,14 @@ class MainActivity : ComponentActivity() {
 private fun KivyaHome(
     listen: ((String) -> Unit, (String) -> Unit) -> Unit,
     speak: (String) -> Unit,
-    phoneAction: (String) -> String
+    phoneAction: (String) -> String,
+    wakeEvents: Flow<Unit>
 ) {
     val context = LocalContext.current
     var mode by remember { mutableStateOf("Phone") }
     var prompt by remember { mutableStateOf("") }
     var response by remember { mutableStateOf("हेलो आर्या, स्वागत है। मैं KIVYA हूँ। बताइए, आज मैं आपकी क्या मदद कर सकती हूँ?") }
     var listening by remember { mutableStateOf(false) }
-    var wakeEnabled by remember { mutableStateOf(false) }
     val offlineChat = remember { KivyaOfflineChat(context.applicationContext) }
     var offlineReady by remember { mutableStateOf(offlineChat.isModelDownloaded()) }
     var offlineBusy by remember { mutableStateOf(false) }
@@ -528,13 +549,26 @@ private fun KivyaHome(
                     context,
                     Intent(context, KivyaWakeWordService::class.java).setAction(KivyaWakeWordService.ACTION_START)
                 )
-                wakeEnabled = true
-                response = "Hey KIVYA wake-word listening चालू है। बंद करने के लिए Stop दबाएँ।"
+                response = "KIVYA का wake-word listener चालू है। इसे notification से बंद किया जा सकता है।"
             } catch (_: Exception) {
                 response = "Wake-word service शुरू नहीं हो पाई। Notification और microphone permission जाँचें।"
             }
         } else {
             response = "Wake Word के लिए microphone permission जरूरी है।"
+        }
+    }
+    LaunchedEffect(Unit) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            try {
+                ContextCompat.startForegroundService(
+                    context,
+                    Intent(context, KivyaWakeWordService::class.java).setAction(KivyaWakeWordService.ACTION_START)
+                )
+            } catch (_: Exception) {
+                response = "Wake-word service शुरू नहीं हो पाई। Notification और microphone permission जाँचें।"
+            }
+        } else {
+            wakeMicPermission.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
     val memory = remember { KivyaMemory(context) }
@@ -736,16 +770,19 @@ private fun KivyaHome(
         }
     }
 
-    LaunchedEffect(Unit) {
-        val activity = context as? MainActivity
-        if (activity?.intent?.getBooleanExtra(KivyaWakeWordService.EXTRA_WAKE_WORD, false) == true) {
-            activity.intent.removeExtra(KivyaWakeWordService.EXTRA_WAKE_WORD)
-            delay(500)
-            listening = true
-            listen(
-                { words -> listening = false; process(words) },
-                { error -> listening = false; response = error }
-            )
+    LaunchedEffect(wakeEvents) {
+        wakeEvents.collect {
+            delay(300)
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+                listening = true
+                listen(
+                    { words -> listening = false; process(words) },
+                    { error -> listening = false; response = error }
+                )
+            } else {
+                listening = false
+                response = "Wake word मिला, लेकिन microphone permission उपलब्ध नहीं है।"
+            }
         }
     }
 
@@ -801,23 +838,6 @@ private fun KivyaHome(
                     QuickAction("Settings", Icons.Default.Settings, Modifier.weight(1f)) { process("Settings खोलो") }
                 }
 
-                Spacer(Modifier.height(12.dp))
-                Button(
-                    onClick = {
-                        if (wakeEnabled) {
-                            context.startService(Intent(context, KivyaWakeWordService::class.java).setAction(KivyaWakeWordService.ACTION_STOP))
-                            wakeEnabled = false
-                            response = "Hey KIVYA wake-word listening बंद कर दी।"
-                        } else {
-                            wakeMicPermission.launch(Manifest.permission.RECORD_AUDIO)
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(50.dp),
-                    shape = RoundedCornerShape(15.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = if (wakeEnabled) Color(0xFFB45B72) else Color(0xFF203B55))
-                ) {
-                    Text(if (wakeEnabled) "STOP WAKE WORD" else "HEY KIVYA", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                }
                 Spacer(Modifier.height(12.dp))
                 Surface(color = Panel, shape = RoundedCornerShape(16.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, Aqua.copy(alpha = .25f)),
