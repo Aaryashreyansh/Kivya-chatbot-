@@ -968,7 +968,8 @@ private fun KivyaHome(
                     OutlinedTextField(
                         value = prompt, onValueChange = { prompt = it },
                         modifier = Modifier.weight(1f),
-                        placeholder = { Text("Message KIVYA...", color = Muted, fontSize = 13.sp) },
+                        label = { Text("Message KIVYA", color = Muted, fontSize = 12.sp) },
+                        placeholder = { Text("Type here...", color = Muted.copy(alpha = .75f), fontSize = 13.sp) },
                         singleLine = true, shape = RoundedCornerShape(16.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = Color.Transparent, unfocusedBorderColor = Color.Transparent,
