@@ -183,7 +183,13 @@ jobs:
           sleep 2
           echo "PASS: wake-word service retains a CPU wake lock while the emulator screen is off" >> test-results/results.txt
 
+          # Expand Android's notification shade through the emulator shell.
+          # A regular Maestro swipe starts in app content and may only scroll the UI.
+          adb shell cmd statusbar expand-notifications
+          sleep 2
+          adb shell dumpsys notification --noredact | grep -F "KIVYA is listening"
           maestro test .maestro/flows/wake-stop.yaml
+          adb shell cmd statusbar collapse
           sleep 2
           if adb shell dumpsys activity services com.aarya.kivya | grep -F "KivyaWakeWordService" | grep -q "isForeground=true"; then
             echo "FAIL: wake-word service still foreground after notification Stop" >> test-results/results.txt
