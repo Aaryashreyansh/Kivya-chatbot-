@@ -230,3 +230,12 @@ jobs:
             /home/runner/.maestro/tests/
           if-no-files-found: warn
           retention-days: 14
+
+      - name: Upload installable debug APK
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kivya-debug-apk-${{ github.run_number }}
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
