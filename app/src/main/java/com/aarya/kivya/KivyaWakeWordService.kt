@@ -1,6 +1,7 @@
 package com.aarya.kivya
 
 import android.app.Notification
+import android.app.PendingIntent
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
@@ -11,6 +12,7 @@ import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.k2fsa.sherpa.onnx.FeatureConfig
@@ -29,6 +31,7 @@ class KivyaWakeWordService : Service() {
     private var recorder: AudioRecord? = null
     private var worker: Thread? = null
     private var spotter: KeywordSpotter? = null
+    private var cpuWakeLock: PowerManager.WakeLock? = null
     @Volatile private var lastTriggerAt = 0L
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -54,17 +57,37 @@ class KivyaWakeWordService : Service() {
         return START_STICKY
     }
 
-    private fun buildNotification(): Notification {
+    private fun buildNotification(message: String = "Wake phrase detection is active. Tap to open KIVYA or Stop to pause."): Notification {
         val manager = getSystemService(NotificationManager::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             manager.createNotificationChannel(
                 NotificationChannel(CHANNEL_ID, "KIVYA Wake Word", NotificationManager.IMPORTANCE_LOW)
             )
         }
+        val openKivya = PendingIntent.getActivity(
+            this,
+            4203,
+            Intent(this, MainActivity::class.java).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                putExtra(EXTRA_WAKE_WORD, true)
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentTitle("KIVYA is listening")
-            .setContentText("Wake-word detection is active. Tap Stop in KIVYA to turn it off.")
+            .setContentText(message)
+            .setContentIntent(openKivya)
+            .addAction(
+                android.R.drawable.ic_media_pause,
+                "Stop",
+                PendingIntent.getService(
+                    this,
+                    4202,
+                    Intent(this, KivyaWakeWordService::class.java).setAction(ACTION_STOP),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+            )
             .setOngoing(true)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .build()
@@ -106,6 +129,7 @@ class KivyaWakeWordService : Service() {
         require(audio.state == AudioRecord.STATE_INITIALIZED) { "Microphone could not be initialized" }
         recorder = audio
         audio.startRecording()
+        acquireCpuWakeLock()
         running = true
         worker = thread(name = "KIVYA-WakeWord") {
             val shortBuffer = ShortArray(SAMPLE_RATE / 10)
@@ -124,11 +148,19 @@ class KivyaWakeWordService : Service() {
                                 if (now - lastTriggerAt < 4000L) continue
                                 lastTriggerAt = now
                                 Log.i(TAG, "Wake word detected")
+                                getSystemService(NotificationManager::class.java).notify(
+                                    NOTIFICATION_ID,
+                                    buildNotification("Wake phrase detected. Tap to speak or Stop to pause.")
+                                )
                                 val launch = Intent(this, MainActivity::class.java).apply {
                                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                                     putExtra(EXTRA_WAKE_WORD, true)
                                 }
-                                startActivity(launch)
+                                try {
+                                    startActivity(launch)
+                                } catch (e: Exception) {
+                                    Log.w(TAG, "Activity launch was blocked; notification tap remains available", e)
+                                }
                             }
                         }
                     } else if (count < 0) {
@@ -146,8 +178,28 @@ class KivyaWakeWordService : Service() {
                 spotter = null
                 recorder = null
                 running = false
+                releaseCpuWakeLock()
                 stopSelf()
             }
+        }
+    }
+
+    private fun acquireCpuWakeLock() {
+        synchronized(this) {
+            val manager = getSystemService(POWER_SERVICE) as PowerManager
+            val lock = cpuWakeLock ?: manager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "$packageName:KIVYA-WakeWord"
+            ).also { cpuWakeLock = it }
+            if (!lock.isHeld) lock.acquire()
+        }
+    }
+
+    private fun releaseCpuWakeLock() {
+        synchronized(this) {
+            val lock = cpuWakeLock
+            cpuWakeLock = null
+            if (lock?.isHeld == true) lock.release()
         }
     }
 
@@ -157,6 +209,7 @@ class KivyaWakeWordService : Service() {
         worker?.interrupt()
         worker = null
         recorder = null
+        releaseCpuWakeLock()
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 

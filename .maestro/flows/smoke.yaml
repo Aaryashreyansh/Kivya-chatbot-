@@ -1,11 +1,40 @@
 appId: com.aarya.kivya
 ---
 - launchApp
+# The Android 14 emulator can occasionally show a Pixel Launcher ANR dialog
+# over the already-rendered app. Wait for the launcher rather than closing it.
+- runFlow:
+    when:
+      visible: "Pixel Launcher isn't responding"
+    commands:
+      - tapOn: "Wait"
+      - waitForAnimationToEnd:
+          timeout: 10000
 - extendedWaitUntil:
     visible: "KIVYA"
-    timeout: 30000
+    timeout: 45000
 - assertVisible: "AI ASSISTANT"
-- assertVisible: "HEY KIVYA"
-- assertVisible: "Message KIVYA..."
+- assertNotVisible: "HEY KIVYA"
+- assertNotVisible: "STOP WAKE WORD"
 - assertVisible: "TALK TO KIVYA"
+- scrollUntilVisible:
+    element:
+      text: "Message KIVYA"
+    direction: DOWN
+    timeout: 10000
+- assertVisible: "Message KIVYA"
+- scrollUntilVisible:
+    element:
+      text: "VOICE LANGUAGE"
+    direction: DOWN
+    timeout: 10000
+- assertVisible: "VOICE LANGUAGE"
+- assertVisible: "हिन्दी"
+- assertVisible: "English"
+- assertVisible: "AI MEMORY"
+- scrollUntilVisible:
+    element:
+      text: "CONVERSATION"
+    direction: DOWN
+    timeout: 10000
 - assertVisible: "CONVERSATION"

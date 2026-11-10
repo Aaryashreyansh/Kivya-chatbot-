@@ -115,12 +115,20 @@ class KivyaOfflineChat(private val context: Context) {
         }
     }
 
-    suspend fun reply(prompt: String): String = mutex.withLock {
+    suspend fun reply(prompt: String, memoryNotes: List<String> = emptyList()): String = mutex.withLock {
         withContext(Dispatchers.IO) {
             val activeConversation = conversation
                 ?: throw IllegalStateException("पहले Download & Install दबाकर Offline AI तैयार करें।")
+            val safeNotes = memoryNotes.map { it.trim().take(300) }.filter { it.isNotBlank() }.takeLast(8)
+            val modelPrompt = if (safeNotes.isEmpty()) {
+                prompt
+            } else {
+                "User-approved local memory notes (use only when relevant):\n" +
+                    safeNotes.joinToString("\n") { "- $it" } +
+                    "\n\nCurrent user message: $prompt"
+            }
             val answer = StringBuilder()
-            activeConversation.sendMessageAsync(prompt).collect { chunk -> answer.append(chunk.toString()) }
+            activeConversation.sendMessageAsync(modelPrompt).collect { chunk -> answer.append(chunk.toString()) }
             answer.toString().trim().ifBlank { "Offline AI से खाली जवाब मिला।" }
         }
     }
