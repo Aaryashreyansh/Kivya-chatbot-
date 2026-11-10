@@ -7,8 +7,13 @@ appId: com.aarya.kivya
 - assertVisible: "AI ASSISTANT"
 - assertNotVisible: "HEY KIVYA"
 - assertNotVisible: "STOP WAKE WORD"
-- assertVisible: "Message KIVYA"
 - assertVisible: "TALK TO KIVYA"
+- scrollUntilVisible:
+    element:
+      text: "Message KIVYA"
+    direction: DOWN
+    timeout: 10000
+- assertVisible: "Message KIVYA"
 - scrollUntilVisible:
     element:
       text: "VOICE LANGUAGE"
