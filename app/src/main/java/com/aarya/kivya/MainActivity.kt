@@ -802,7 +802,7 @@ private fun KivyaHome(
         }
     }
 
-    LaunchedEffect(wakeEvents) {
+    LaunchedEffect(wakeEvents, speechLanguage) {
         wakeEvents.collect {
             delay(300)
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
