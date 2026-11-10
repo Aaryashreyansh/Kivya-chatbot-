@@ -163,6 +163,26 @@ jobs:
           set -euo pipefail
           mkdir -p test-results
 
+          # Maestro's Android device-server connection can occasionally drop
+          # on a heavily loaded GitHub-hosted emulator. Retry the same flow
+          # with a fresh Maestro session after reconnecting ADB.
+          run_maestro() {
+            local attempt
+            for attempt in 1 2 3; do
+              echo "Running Maestro flow (attempt $attempt/3): $*"
+              if maestro test "$@"; then
+                return 0
+              fi
+              if [ "$attempt" -lt 3 ]; then
+                echo "Maestro flow failed; reconnecting emulator before retry."
+                adb reconnect || true
+                timeout 30s adb wait-for-device
+                sleep 8
+              fi
+            done
+            return 1
+          }
+
           # Maestro's Android device-server can occasionally disconnect during
           # first startup on software-rendered GitHub-hosted emulators. Retry
           # once after reconnecting ADB; do not hide a persistent test failure.
