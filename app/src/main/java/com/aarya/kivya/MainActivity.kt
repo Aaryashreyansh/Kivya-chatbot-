@@ -228,10 +228,9 @@ class MainActivity : ComponentActivity() {
             .replace(Regex("(?i)K\\s*I\\s*V\\s*Y\\s*A"), "किव्या")
             .replace(Regex("(?i)\\bKIVYA\\b"), "किव्या")
             .replace(Regex("(?i)\\bKivya\\b"), "किव्या")
-        val containsHindi = speechText.any { it in '\\u0900'..'\\u097F' }
+        val containsHindi = speechText.any { it.code in 0x0900..0x097F }
         val voiceLocale = if (containsHindi) Locale("hi", "IN") else Locale("en", "IN")
-        if (tts?.isLanguageAvailable(voiceLocale) == TextToSpeech.LANG_AVAILABLE ||
-            tts?.isLanguageAvailable(voiceLocale) == TextToSpeech.LANG_COUNTRY_AVAILABLE) {
+        if ((tts?.isLanguageAvailable(voiceLocale) ?: TextToSpeech.LANG_NOT_SUPPORTED) >= TextToSpeech.LANG_AVAILABLE) {
             tts?.language = voiceLocale
         }
         tts?.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, "kivya-reply")
@@ -908,8 +907,18 @@ private fun KivyaHome(
                         Switch(checked = memoryEnabled, onCheckedChange = {
                             memoryEnabled = it
                             settings.memoryEnabled = it
-                            if (it) response = "Local Memory चालू है। ‘याद रखो: ...’ से कोई note सेव करें।"
-                            else response = "Local Memory pause है। नई बातचीत सेव नहीं होगी।"
+                            if (it) {
+                                if (chat.size <= 1) {
+                                    val previousHistory = memory.load()
+                                    if (previousHistory.isNotEmpty()) {
+                                        chat.clear()
+                                        chat.addAll(previousHistory)
+                                    }
+                                }
+                                response = "Local Memory चालू है। ‘याद रखो: ...’ से कोई note सेव करें।"
+                            } else {
+                                response = "Local Memory pause है। नई बातचीत सेव नहीं होगी।"
+                            }
                         })
                     }
                 }
