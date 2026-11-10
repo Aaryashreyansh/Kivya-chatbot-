@@ -11,6 +11,15 @@ appId: com.aarya.kivya
 - assertVisible: "TALK TO KIVYA"
 - scrollUntilVisible:
     element:
+      text: "VOICE LANGUAGE"
+    direction: DOWN
+    timeout: 10000
+- assertVisible: "VOICE LANGUAGE"
+- assertVisible: "हिन्दी"
+- assertVisible: "English"
+- assertVisible: "AI MEMORY"
+- scrollUntilVisible:
+    element:
       text: "CONVERSATION"
     direction: DOWN
     timeout: 10000
