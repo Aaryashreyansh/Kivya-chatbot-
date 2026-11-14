@@ -78,17 +78,54 @@ jobs:
       - name: Install Android emulator packages
         shell: bash
         run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$SDK_ROOT" ]; then
+            echo "ANDROID_HOME/ANDROID_SDK_ROOT is not set."
+            exit 1
+          fi
+          export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$SDK_ROOT/platform-tools:$SDK_ROOT/emulator:$PATH"
           sdkmanager --install "platform-tools" "emulator" "system-images;android-34;google_apis;x86_64"
-          echo "no" | avdmanager create avd --force -n kivya-api34 -k "system-images;android-34;google_apis;x86_64" -d pixel_2
+          test -x "$SDK_ROOT/emulator/emulator" || {
+            echo "Android emulator package was not installed under $SDK_ROOT/emulator"
+            ls -la "$SDK_ROOT" || true
+            exit 1
+          }
+          echo "$SDK_ROOT/emulator" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          # Keep AVD creation and emulator lookup on the same explicit directory.
+          export ANDROID_USER_HOME="$HOME/.android"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo "no" | avdmanager create avd --force -n kivya-api34 -k "system-images;android-34;google_apis;x86_64" -d pixel_2 -p "$ANDROID_AVD_HOME/kivya-api34.avd"
+          test -f "$ANDROID_AVD_HOME/kivya-api34.ini"
+          "$SDK_ROOT/emulator/emulator" -list-avds
 
       - name: Boot Android emulator
         shell: bash
         run: |
           set -euo pipefail
-          nohup emulator -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
+          SDK_ROOT="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          if [ -z "$SDK_ROOT" ] || [ ! -x "$SDK_ROOT/emulator/emulator" ]; then
+            echo "Android emulator executable missing. SDK_ROOT=$SDK_ROOT"
+            find "${SDK_ROOT:-/opt}" -maxdepth 4 -type f -name emulator -perm -111 2>/dev/null | head -20 || true
+            exit 1
+          fi
+          export PATH="$SDK_ROOT/emulator:$SDK_ROOT/platform-tools:$PATH"
+          export ANDROID_USER_HOME="$HOME/.android"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          test -f "$ANDROID_AVD_HOME/kivya-api34.ini" || {
+            echo "AVD config not found at $ANDROID_AVD_HOME/kivya-api34.ini"
+            "$SDK_ROOT/emulator/emulator" -list-avds || true
+            find "$HOME/.android" -maxdepth 3 -type f -name '*.ini' -print 2>/dev/null || true
+            exit 1
+          }
+          # GitHub runner may not expose /dev/kvm to the runner user.
+          # Force software CPU emulation so the job does not require KVM permissions.
+          nohup "$SDK_ROOT/emulator/emulator" -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel off -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
           echo $! > /tmp/kivya-emulator.pid
-          if ! timeout 180s adb wait-for-device; then
-            echo "ADB did not detect the emulator within 3 minutes."
+          if ! timeout 360s adb wait-for-device; then
+            echo "ADB did not detect the software-rendered emulator within 6 minutes."
             adb devices -l || true
             tail -n 200 /tmp/kivya-emulator.log || true
             exit 1

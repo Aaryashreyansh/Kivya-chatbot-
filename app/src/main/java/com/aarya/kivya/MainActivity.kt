@@ -75,11 +75,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.DisposableEffect
 
-private val Deep = Color(0xFF070B16)
-private val Panel = Color(0xFF111B2D)
-private val Aqua = Color(0xFF65F0DE)
-private val Blue = Color(0xFF6C8CFF)
-private val Muted = Color(0xFF91A2BA)
+private val Deep = Color(0xFF160D12)
+private val Panel = Color(0xFF28171F)
+private val Aqua = Color(0xFFD8A0A8)
+private val Blue = Color(0xFFB87983)
+private val Muted = Color(0xFFC8B4B8)
+private val Ivory = Color(0xFFF4E9E2)
+private val RoseGold = Color(0xFFD6A68A)
 
 class MainActivity : ComponentActivity() {
     private var tts: TextToSpeech? = null
@@ -756,8 +758,8 @@ private fun KivyaHome(
         } else response = "Voice इस्तेमाल करने के लिए microphone permission चाहिए।"
     }
 
-    MaterialTheme(colorScheme = darkColorScheme(primary = Aqua, background = Deep, surface = Panel, onPrimary = Deep)) {
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF172744), Deep, Color(0xFF090D19))))) {
+    MaterialTheme(colorScheme = darkColorScheme(primary = RoseGold, secondary = Aqua, background = Deep, surface = Panel, onPrimary = Deep, onBackground = Ivory, onSurface = Ivory)) {
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF3A202A), Deep, Color(0xFF10090D))))) {
             Column(
                 Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
                     .imePadding().verticalScroll(rememberScrollState())
@@ -768,7 +770,7 @@ private fun KivyaHome(
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text("KIVYA", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
-                        Text("AI ASSISTANT", color = Aqua, fontSize = 9.sp, letterSpacing = 1.35.sp)
+                        Text("MAKE A HOBBY", color = RoseGold, fontSize = 9.sp, letterSpacing = 1.8.sp, fontWeight = FontWeight.SemiBold)
                     }
                     Surface(color = Color(0xFF182C43), shape = CircleShape, border = androidx.compose.foundation.BorderStroke(1.dp, Aqua.copy(alpha = .28f))) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
@@ -789,7 +791,7 @@ private fun KivyaHome(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
                         VoiceOrb(listening)
                         Text(if (listening) "मैं सुन रही हूँ..." else "नमस्ते, मैं Kivya हूँ", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                        Text(response, color = Color(0xFFD5E1F2), fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp), lineHeight = 19.sp)
+                        Text(response, color = Ivory.copy(alpha = .92f), fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp), lineHeight = 19.sp)
                     }
                 }
 
@@ -886,7 +888,7 @@ private fun KivyaHome(
                 ) {
                     chat.takeLast(5).reversed().forEach { line ->
                         Surface(color = Color.White.copy(alpha = .045f), shape = RoundedCornerShape(13.dp)) {
-                            Text(line, color = Color(0xFFDDE6F5), fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 10.dp))
+                            Text(line, color = Ivory.copy(alpha = .92f), fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 10.dp))
                         }
                     }
                 }
@@ -980,7 +982,7 @@ private fun QuickAction(label: String, icon: androidx.compose.ui.graphics.vector
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 12.dp)) {
             Icon(icon, null, tint = Aqua, modifier = Modifier.size(21.dp))
-            Text(label, color = Color(0xFFDCE7F6), fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
+            Text(label, color = Ivory.copy(alpha = .92f), fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
         }
     }
 }
