@@ -120,10 +120,12 @@ jobs:
             find "$HOME/.android" -maxdepth 3 -type f -name '*.ini' -print 2>/dev/null || true
             exit 1
           }
-          nohup "$SDK_ROOT/emulator/emulator" -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
+          # GitHub runner may not expose /dev/kvm to the runner user.
+          # Force software CPU emulation so the job does not require KVM permissions.
+          nohup "$SDK_ROOT/emulator/emulator" -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel off -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
           echo $! > /tmp/kivya-emulator.pid
-          if ! timeout 180s adb wait-for-device; then
-            echo "ADB did not detect the emulator within 3 minutes."
+          if ! timeout 360s adb wait-for-device; then
+            echo "ADB did not detect the software-rendered emulator within 6 minutes."
             adb devices -l || true
             tail -n 200 /tmp/kivya-emulator.log || true
             exit 1
