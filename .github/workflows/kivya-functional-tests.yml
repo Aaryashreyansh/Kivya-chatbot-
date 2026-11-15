@@ -103,6 +103,15 @@ jobs:
           export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
           mkdir -p "$ANDROID_AVD_HOME"
           echo "no" | avdmanager create avd --force -n kivya-api34 -k "system-images;android-34;default;x86_64" -d pixel_2 -p "$ANDROID_AVD_HOME/kivya-api34.avd"
+          # Give Android system_server enough RAM/CPU under software-only virtualization.
+          cat >> "$ANDROID_AVD_HOME/kivya-api34.avd/config.ini" <<'EOF'
+          hw.ramSize=4096
+          hw.cpu.ncore=4
+          hw.lcd.width=720
+          hw.lcd.height=1280
+          hw.lcd.density=320
+          disk.dataPartition.size=4G
+          EOF
           test -f "$ANDROID_AVD_HOME/kivya-api34.ini"
           "$SDK_ROOT/emulator/emulator" -list-avds
 
@@ -127,7 +136,7 @@ jobs:
           }
           # GitHub runner may not expose /dev/kvm to the runner user.
           # Force software CPU emulation so the job does not require KVM permissions.
-          nohup "$SDK_ROOT/emulator/emulator" -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel off -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
+          nohup "$SDK_ROOT/emulator/emulator" -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel off -cores 4 -memory 4096 -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
           echo $! > /tmp/kivya-emulator.pid
           if ! timeout 360s adb wait-for-device; then
             echo "ADB did not detect the software-rendered emulator within 6 minutes."
