@@ -90,7 +90,7 @@ jobs:
             exit 1
           fi
           export PATH="$SDK_ROOT/cmdline-tools/latest/bin:$SDK_ROOT/platform-tools:$SDK_ROOT/emulator:$PATH"
-          sdkmanager --install "platform-tools" "emulator" "system-images;android-34;google_apis;x86_64"
+          sdkmanager --install "platform-tools" "emulator" "system-images;android-34;default;x86_64"
           test -x "$SDK_ROOT/emulator/emulator" || {
             echo "Android emulator package was not installed under $SDK_ROOT/emulator"
             ls -la "$SDK_ROOT" || true
@@ -102,7 +102,7 @@ jobs:
           export ANDROID_USER_HOME="$HOME/.android"
           export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
           mkdir -p "$ANDROID_AVD_HOME"
-          echo "no" | avdmanager create avd --force -n kivya-api34 -k "system-images;android-34;google_apis;x86_64" -d pixel_2 -p "$ANDROID_AVD_HOME/kivya-api34.avd"
+          echo "no" | avdmanager create avd --force -n kivya-api34 -k "system-images;android-34;default;x86_64" -d pixel_2 -p "$ANDROID_AVD_HOME/kivya-api34.avd"
           test -f "$ANDROID_AVD_HOME/kivya-api34.ini"
           "$SDK_ROOT/emulator/emulator" -list-avds
 
