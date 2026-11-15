@@ -23,7 +23,12 @@ concurrency:
 jobs:
   android-emulator:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
+    env:
+      # Software-rendered x86_64 emulators need more time to install and start Maestro's
+      # instrumentation driver than the 15-second default.
+      MAESTRO_DRIVER_STARTUP_TIMEOUT: 240000
+      MAESTRO_CLI_NO_ANALYTICS: "true"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
