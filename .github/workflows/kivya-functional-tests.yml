@@ -115,6 +115,23 @@ jobs:
           test -f "$ANDROID_AVD_HOME/kivya-api34.ini"
           "$SDK_ROOT/emulator/emulator" -list-avds
 
+      - name: Enable and verify KVM acceleration
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -e /dev/kvm ]; then
+            echo "::error::This GitHub runner does not expose /dev/kvm. Use a KVM-capable Ubuntu runner."
+            exit 1
+          fi
+          sudo chmod 666 /dev/kvm
+          ls -l /dev/kvm
+          if [ ! -r /dev/kvm ] || [ ! -w /dev/kvm ]; then
+            echo "::error::Runner user still cannot read/write /dev/kvm after permission update."
+            id
+            exit 1
+          fi
+          echo "KVM device is accessible to the runner."
+
       - name: Boot Android emulator
         shell: bash
         run: |
@@ -134,12 +151,11 @@ jobs:
             find "$HOME/.android" -maxdepth 3 -type f -name '*.ini' -print 2>/dev/null || true
             exit 1
           }
-          # GitHub runner may not expose /dev/kvm to the runner user.
-          # Force software CPU emulation so the job does not require KVM permissions.
-          nohup "$SDK_ROOT/emulator/emulator" -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel off -cores 4 -memory 4096 -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
+          # Use hardware acceleration. The preceding step grants the runner access to /dev/kvm.
+          nohup "$SDK_ROOT/emulator/emulator" -avd kivya-api34 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -accel on -cores 4 -memory 4096 -no-snapshot-load -no-snapshot-save -wipe-data > /tmp/kivya-emulator.log 2>&1 &
           echo $! > /tmp/kivya-emulator.pid
-          if ! timeout 360s adb wait-for-device; then
-            echo "ADB did not detect the software-rendered emulator within 6 minutes."
+          if ! timeout 240s adb wait-for-device; then
+            echo "ADB did not detect the KVM-accelerated emulator within 4 minutes."
             adb devices -l || true
             tail -n 200 /tmp/kivya-emulator.log || true
             exit 1
