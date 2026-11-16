@@ -4,7 +4,7 @@ appId: com.aarya.kivya
 - extendedWaitUntil:
     visible: "KIVYA"
     timeout: 120000
-- assertVisible: "AI ASSISTANT"
+- assertVisible: "MAKE A HOBBY"
 - assertVisible: "HEY KIVYA"
 - assertVisible: "Message KIVYA..."
 - assertVisible: "TALK TO KIVYA"
