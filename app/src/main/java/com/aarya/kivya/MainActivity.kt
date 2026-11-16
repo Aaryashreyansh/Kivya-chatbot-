@@ -710,23 +710,45 @@ private fun KivyaHome(
                     }
                 } else withContext(Dispatchers.IO) {
                     try {
+                        val preferences = context.getSharedPreferences("kivya_auth", android.content.Context.MODE_PRIVATE)
+                        var accessToken = preferences.getString("guest_access_token", null)
+                        if (accessToken.isNullOrBlank()) {
+                            val authConnection = (URL("https://kivya-gemini-api.onrender.com/auth/guest").openConnection() as HttpURLConnection).apply {
+                                requestMethod = "POST"
+                                connectTimeout = 20000
+                                readTimeout = 30000
+                                doOutput = true
+                                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                            }
+                            try {
+                                authConnection.outputStream.use { it.write("{}".toByteArray(Charsets.UTF_8)) }
+                                val authStatus = authConnection.responseCode
+                                val authStream = if (authStatus in 200..299) authConnection.inputStream else authConnection.errorStream
+                                val authRaw = authStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                                val authJson = JSONObject(authRaw.ifBlank { "{}" })
+                                if (authStatus !in 200..299) {
+                                    throw IllegalStateException(authJson.optString("detail").ifBlank { "Guest login failed ($authStatus)" })
+                                }
+                                accessToken = authJson.optString("access_token").takeIf { it.isNotBlank() }
+                                    ?: throw IllegalStateException("Guest login ने access token नहीं दिया।")
+                                preferences.edit().putString("guest_access_token", accessToken).apply()
+                            } finally {
+                                authConnection.disconnect()
+                            }
+                        }
+
                         val connection = (URL("https://kivya-gemini-api.onrender.com/v1/chat").openConnection() as HttpURLConnection).apply {
                             requestMethod = "POST"
                             connectTimeout = 20000
                             readTimeout = 60000
                             doOutput = true
                             setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                            setRequestProperty("Authorization", "Bearer $accessToken")
                         }
                         try {
-                            val history = JSONArray()
-                            chat.takeLast(12).forEach { line -> history.put(line.take(1000)) }
-                            memory.loadNotes().takeLast(10).forEach { note ->
-                                history.put("KIVYA saved user note: " + note.take(500))
-                            }
                             val body = JSONObject()
                                 .put("message", text)
                                 .put("language", "auto")
-                                .put("history", history)
                                 .toString()
                             connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
                             val status = connection.responseCode
