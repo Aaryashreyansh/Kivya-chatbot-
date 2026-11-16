@@ -517,12 +517,30 @@ private fun KivyaHome(
     var listening by remember { mutableStateOf(false) }
     var wakeEnabled by remember { mutableStateOf(false) }
     val offlineChat = remember { KivyaOfflineChat(context.applicationContext) }
-    var offlineReady by remember { mutableStateOf(offlineChat.isModelDownloaded()) }
+    var offlineDownloaded by remember { mutableStateOf(offlineChat.isModelDownloaded()) }
+    var offlineReady by remember { mutableStateOf(offlineChat.isReady()) }
     var offlineBusy by remember { mutableStateOf(false) }
     var offlineProgress by remember { mutableIntStateOf(0) }
-    var offlineStatus by remember { mutableStateOf("Offline AI अभी डाउनलोड नहीं है।") }
+    var offlineStatus by remember { mutableStateOf(if (offlineDownloaded) "मॉडल मिला। Offline AI लोड होना बाकी है।" else "Offline AI मॉडल अभी डाउनलोड नहीं है।") }
     var offlineEnabled by remember { mutableStateOf(false) }
     DisposableEffect(offlineChat) { onDispose { offlineChat.close() } }
+    LaunchedEffect(offlineChat) {
+        // A downloaded model is not ready until LiteRT initializes its engine.
+        // Load it on app start so Offline Mode survives an app restart.
+        if (offlineDownloaded && !offlineReady) {
+            offlineBusy = true
+            offlineStatus = "डाउनलोड किया हुआ मॉडल लोड हो रहा है..."
+            try {
+                offlineChat.installAndLoad { p -> offlineProgress = p }
+                offlineReady = offlineChat.isReady()
+                offlineStatus = if (offlineReady) "तैयार। Offline Mode चालू किया जा सकता है।" else "मॉडल लोड नहीं हो पाया।"
+            } catch (e: Exception) {
+                offlineStatus = "मॉडल लोड नहीं हुआ: ${e.message ?: "फिर कोशिश करें"}"
+            } finally {
+                offlineBusy = false
+            }
+        }
+    }
     val wakeMicPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             try {
@@ -829,22 +847,27 @@ private fun KivyaHome(
                         Text(offlineStatus, color = Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
                         if (offlineBusy) LinearProgressIndicator(progress = { offlineProgress / 100f }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                            Button(enabled = !offlineBusy, modifier = Modifier.weight(1f), onClick = {
+                            Button(enabled = !offlineBusy && !offlineReady, modifier = Modifier.weight(1f), onClick = {
                                 offlineBusy = true
                                 scope.launch {
                                     try {
                                         offlineChat.installAndLoad { p -> offlineProgress = p; offlineStatus = "डाउनलोड: $p%" }
-                                        offlineReady = true
-                                        offlineEnabled = true
-                                        offlineStatus = "तैयार। अब चैट बिना इंटरनेट चलेगी।"
+                                        offlineDownloaded = offlineChat.isModelDownloaded()
+                                        offlineReady = offlineChat.isReady()
+                                        offlineEnabled = offlineReady
+                                        offlineStatus = if (offlineReady) "तैयार। अब चैट बिना इंटरनेट चलेगी।" else "मॉडल डाउनलोड हुआ, लेकिन engine तैयार नहीं है।"
                                         response = offlineStatus
                                     } catch (e: Exception) {
+                                        offlineReady = offlineChat.isReady()
                                         offlineStatus = "इंस्टॉल नहीं हुआ: ${e.message ?: "फिर कोशिश करें"}"
                                     } finally { offlineBusy = false }
                                 }
-                            }) { Text(if (offlineReady) "LOAD OFFLINE AI" else "DOWNLOAD · 347 MB", fontSize = 10.sp) }
+                            }) { Text(if (offlineDownloaded) "OFFLINE AI LOADED" else "DOWNLOAD · 347 MB", fontSize = 10.sp) }
                             OutlinedButton(enabled = offlineReady && !offlineBusy, modifier = Modifier.weight(1f),
-                                onClick = { offlineEnabled = !offlineEnabled; offlineStatus = if (offlineEnabled) "Offline Mode चालू" else "Online Mode चालू" }) {
+                                onClick = {
+                                    offlineEnabled = !offlineEnabled
+                                    offlineStatus = if (offlineEnabled) "Offline Mode चालू" else "Online Mode चालू"
+                                }) {
                                 Text(if (offlineEnabled) "OFFLINE ON" else "OFFLINE OFF", fontSize = 10.sp)
                             }
                         }
