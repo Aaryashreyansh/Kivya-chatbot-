@@ -6,6 +6,16 @@ appId: com.aarya.kivya
     timeout: 120000
 - assertVisible: "MAKE A HOBBY"
 - assertVisible: "HEY KIVYA"
-- assertVisible: "Message KIVYA..."
 - assertVisible: "TALK TO KIVYA"
+# The chat composer and conversation are below the initial viewport in the
+# vertically scrollable Home screen. Scroll them into view before asserting.
+- scrollUntilVisible:
+    element: "Message KIVYA..."
+    direction: DOWN
+    timeout: 15000
+- assertVisible: "Message KIVYA..."
+- scrollUntilVisible:
+    element: "CONVERSATION"
+    direction: DOWN
+    timeout: 15000
 - assertVisible: "CONVERSATION"
