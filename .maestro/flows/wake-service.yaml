@@ -2,6 +2,6 @@ appId: com.aarya.kivya
 ---
 - launchApp
 - tapOn: "HEY KIVYA"
-- assertVisible:
-    text: "STOP WAKE WORD"
+- extendedWaitUntil:
+    visible: "STOP WAKE WORD"
     timeout: 10000
