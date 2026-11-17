@@ -18,7 +18,8 @@
     <application
         android:allowBackup="true"
         android:label="Kivya"
-        android:icon="@drawable/kivya_logo"
+        android:icon="@drawable/kivya_mark"
+        android:roundIcon="@drawable/kivya_mark"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:supportsRtl="true">
         <service
