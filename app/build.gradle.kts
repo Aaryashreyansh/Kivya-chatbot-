@@ -8,7 +8,15 @@ plugins {
 android {
     namespace = "com.aarya.kivya"
     compileSdk = 35
-    defaultConfig { applicationId = "com.aarya.kivya"; minSdk = 24; targetSdk = 35; versionCode = 1; versionName = "0.1.0" }
+    defaultConfig {
+        applicationId = "com.aarya.kivya"
+        minSdk = 24
+        targetSdk = 35
+        versionCode = 1
+        versionName = "0.1.0"
+        // KIVYA is being tested on 64-bit Android phones; avoid bundling unused x86 ABIs.
+        ndk { abiFilters += listOf("arm64-v8a") }
+    }
     buildFeatures { compose = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     buildTypes {

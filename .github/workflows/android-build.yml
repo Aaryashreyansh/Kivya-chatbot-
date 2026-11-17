@@ -1,7 +1,7 @@
 name: Android CI
 on:
   push:
-    branches: [ main, feature/call-pickup-wakeword ]
+    branches: [ main, feature/call-pickup-wakeword, feature/luxury-kivya-ui ]
   workflow_dispatch:
 permissions:
   contents: write

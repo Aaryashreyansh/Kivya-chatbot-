@@ -25,6 +25,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -57,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -75,11 +77,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import androidx.compose.runtime.DisposableEffect
 
-private val Deep = Color(0xFF070B16)
-private val Panel = Color(0xFF111B2D)
-private val Aqua = Color(0xFF65F0DE)
-private val Blue = Color(0xFF6C8CFF)
-private val Muted = Color(0xFF91A2BA)
+private val Deep = Color(0xFF160D12)
+private val Panel = Color(0xFF28171F)
+private val Aqua = Color(0xFFD8A0A8)
+private val Blue = Color(0xFFB87983)
+private val Muted = Color(0xFFC8B4B8)
+private val Ivory = Color(0xFFF4E9E2)
+private val RoseGold = Color(0xFFD6A68A)
 
 class MainActivity : ComponentActivity() {
     private var tts: TextToSpeech? = null
@@ -515,12 +519,30 @@ private fun KivyaHome(
     var listening by remember { mutableStateOf(false) }
     var wakeEnabled by remember { mutableStateOf(false) }
     val offlineChat = remember { KivyaOfflineChat(context.applicationContext) }
-    var offlineReady by remember { mutableStateOf(offlineChat.isModelDownloaded()) }
+    var offlineDownloaded by remember { mutableStateOf(offlineChat.isModelDownloaded()) }
+    var offlineReady by remember { mutableStateOf(offlineChat.isReady()) }
     var offlineBusy by remember { mutableStateOf(false) }
     var offlineProgress by remember { mutableIntStateOf(0) }
-    var offlineStatus by remember { mutableStateOf("Offline AI अभी डाउनलोड नहीं है।") }
+    var offlineStatus by remember { mutableStateOf(if (offlineDownloaded) "मॉडल मिला। Offline AI लोड होना बाकी है।" else "Offline AI मॉडल अभी डाउनलोड नहीं है।") }
     var offlineEnabled by remember { mutableStateOf(false) }
     DisposableEffect(offlineChat) { onDispose { offlineChat.close() } }
+    LaunchedEffect(offlineChat) {
+        // A downloaded model is not ready until LiteRT initializes its engine.
+        // Load it on app start so Offline Mode survives an app restart.
+        if (offlineDownloaded && !offlineReady) {
+            offlineBusy = true
+            offlineStatus = "डाउनलोड किया हुआ मॉडल लोड हो रहा है..."
+            try {
+                offlineChat.installAndLoad { p -> offlineProgress = p }
+                offlineReady = offlineChat.isReady()
+                offlineStatus = if (offlineReady) "तैयार। Offline Mode चालू किया जा सकता है।" else "मॉडल लोड नहीं हो पाया।"
+            } catch (e: Exception) {
+                offlineStatus = "मॉडल लोड नहीं हुआ: ${e.message ?: "फिर कोशिश करें"}"
+            } finally {
+                offlineBusy = false
+            }
+        }
+    }
     val wakeMicPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             try {
@@ -690,23 +712,45 @@ private fun KivyaHome(
                     }
                 } else withContext(Dispatchers.IO) {
                     try {
+                        val preferences = context.getSharedPreferences("kivya_auth", android.content.Context.MODE_PRIVATE)
+                        var accessToken = preferences.getString("guest_access_token", null)
+                        if (accessToken.isNullOrBlank()) {
+                            val authConnection = (URL("https://kivya-gemini-api.onrender.com/auth/guest").openConnection() as HttpURLConnection).apply {
+                                requestMethod = "POST"
+                                connectTimeout = 20000
+                                readTimeout = 30000
+                                doOutput = true
+                                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                            }
+                            try {
+                                authConnection.outputStream.use { it.write("{}".toByteArray(Charsets.UTF_8)) }
+                                val authStatus = authConnection.responseCode
+                                val authStream = if (authStatus in 200..299) authConnection.inputStream else authConnection.errorStream
+                                val authRaw = authStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                                val authJson = JSONObject(authRaw.ifBlank { "{}" })
+                                if (authStatus !in 200..299) {
+                                    throw IllegalStateException(authJson.optString("detail").ifBlank { "Guest login failed ($authStatus)" })
+                                }
+                                accessToken = authJson.optString("access_token").takeIf { it.isNotBlank() }
+                                    ?: throw IllegalStateException("Guest login ने access token नहीं दिया।")
+                                preferences.edit().putString("guest_access_token", accessToken).apply()
+                            } finally {
+                                authConnection.disconnect()
+                            }
+                        }
+
                         val connection = (URL("https://kivya-gemini-api.onrender.com/v1/chat").openConnection() as HttpURLConnection).apply {
                             requestMethod = "POST"
                             connectTimeout = 20000
                             readTimeout = 60000
                             doOutput = true
                             setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                            setRequestProperty("Authorization", "Bearer $accessToken")
                         }
                         try {
-                            val history = JSONArray()
-                            chat.takeLast(12).forEach { line -> history.put(line.take(1000)) }
-                            memory.loadNotes().takeLast(10).forEach { note ->
-                                history.put("KIVYA saved user note: " + note.take(500))
-                            }
                             val body = JSONObject()
                                 .put("message", text)
                                 .put("language", "auto")
-                                .put("history", history)
                                 .toString()
                             connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
                             val status = connection.responseCode
@@ -756,8 +800,8 @@ private fun KivyaHome(
         } else response = "Voice इस्तेमाल करने के लिए microphone permission चाहिए।"
     }
 
-    MaterialTheme(colorScheme = darkColorScheme(primary = Aqua, background = Deep, surface = Panel, onPrimary = Deep)) {
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF172744), Deep, Color(0xFF090D19))))) {
+    MaterialTheme(colorScheme = darkColorScheme(primary = RoseGold, secondary = Aqua, background = Deep, surface = Panel, onPrimary = Deep, onBackground = Ivory, onSurface = Ivory)) {
+        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF3A202A), Deep, Color(0xFF10090D))))) {
             Column(
                 Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
                     .imePadding().verticalScroll(rememberScrollState())
@@ -768,7 +812,7 @@ private fun KivyaHome(
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text("KIVYA", color = Color.White, fontSize = 27.sp, fontWeight = FontWeight.Black, letterSpacing = 4.sp)
-                        Text("AI ASSISTANT", color = Aqua, fontSize = 9.sp, letterSpacing = 1.35.sp)
+                        Text("MAKE A HOBBY", color = RoseGold, fontSize = 9.sp, letterSpacing = 1.8.sp, fontWeight = FontWeight.SemiBold)
                     }
                     Surface(color = Color(0xFF182C43), shape = CircleShape, border = androidx.compose.foundation.BorderStroke(1.dp, Aqua.copy(alpha = .28f))) {
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
@@ -789,7 +833,7 @@ private fun KivyaHome(
                     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
                         VoiceOrb(listening)
                         Text(if (listening) "मैं सुन रही हूँ..." else "नमस्ते, मैं Kivya हूँ", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                        Text(response, color = Color(0xFFD5E1F2), fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp), lineHeight = 19.sp)
+                        Text(response, color = Ivory.copy(alpha = .92f), fontSize = 13.sp, modifier = Modifier.padding(top = 12.dp), lineHeight = 19.sp)
                     }
                 }
 
@@ -827,22 +871,27 @@ private fun KivyaHome(
                         Text(offlineStatus, color = Muted, fontSize = 10.sp, modifier = Modifier.padding(top = 4.dp))
                         if (offlineBusy) LinearProgressIndicator(progress = { offlineProgress / 100f }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp))
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                            Button(enabled = !offlineBusy, modifier = Modifier.weight(1f), onClick = {
+                            Button(enabled = !offlineBusy && !offlineReady, modifier = Modifier.weight(1f), onClick = {
                                 offlineBusy = true
                                 scope.launch {
                                     try {
                                         offlineChat.installAndLoad { p -> offlineProgress = p; offlineStatus = "डाउनलोड: $p%" }
-                                        offlineReady = true
-                                        offlineEnabled = true
-                                        offlineStatus = "तैयार। अब चैट बिना इंटरनेट चलेगी।"
+                                        offlineDownloaded = offlineChat.isModelDownloaded()
+                                        offlineReady = offlineChat.isReady()
+                                        offlineEnabled = offlineReady
+                                        offlineStatus = if (offlineReady) "तैयार। अब चैट बिना इंटरनेट चलेगी।" else "मॉडल डाउनलोड हुआ, लेकिन engine तैयार नहीं है।"
                                         response = offlineStatus
                                     } catch (e: Exception) {
+                                        offlineReady = offlineChat.isReady()
                                         offlineStatus = "इंस्टॉल नहीं हुआ: ${e.message ?: "फिर कोशिश करें"}"
                                     } finally { offlineBusy = false }
                                 }
-                            }) { Text(if (offlineReady) "LOAD OFFLINE AI" else "DOWNLOAD · 347 MB", fontSize = 10.sp) }
+                            }) { Text(if (offlineDownloaded) "OFFLINE AI LOADED" else "DOWNLOAD · 347 MB", fontSize = 10.sp) }
                             OutlinedButton(enabled = offlineReady && !offlineBusy, modifier = Modifier.weight(1f),
-                                onClick = { offlineEnabled = !offlineEnabled; offlineStatus = if (offlineEnabled) "Offline Mode चालू" else "Online Mode चालू" }) {
+                                onClick = {
+                                    offlineEnabled = !offlineEnabled
+                                    offlineStatus = if (offlineEnabled) "Offline Mode चालू" else "Online Mode चालू"
+                                }) {
                                 Text(if (offlineEnabled) "OFFLINE ON" else "OFFLINE OFF", fontSize = 10.sp)
                             }
                         }
@@ -886,7 +935,7 @@ private fun KivyaHome(
                 ) {
                     chat.takeLast(5).reversed().forEach { line ->
                         Surface(color = Color.White.copy(alpha = .045f), shape = RoundedCornerShape(13.dp)) {
-                            Text(line, color = Color(0xFFDDE6F5), fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 10.dp))
+                            Text(line, color = Ivory.copy(alpha = .92f), fontSize = 12.sp, modifier = Modifier.fillMaxWidth().padding(horizontal = 13.dp, vertical = 10.dp))
                         }
                     }
                 }
@@ -913,22 +962,11 @@ private fun KivyaHome(
 
 @Composable
 private fun KivyaMark(modifier: Modifier = Modifier) {
-    Box(modifier.background(Brush.linearGradient(listOf(Aqua.copy(alpha = .2f), Blue.copy(alpha = .2f))), RoundedCornerShape(18.dp))
-        .border(1.dp, Aqua.copy(alpha = .35f), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize().padding(7.dp)) {
-            val center = Offset(size.width / 2, size.height / 2)
-            val r = size.minDimension * .39f
-            drawCircle(Aqua.copy(alpha = .16f), r, center)
-            drawCircle(Brush.sweepGradient(listOf(Aqua, Blue, Color(0xFFB56BFF), Aqua)), r, center, style = Stroke(width = 2.6.dp.toPx()))
-            drawArc(Blue, 205f, 125f, false, topLeft = Offset(center.x-r*.72f, center.y-r*.72f),
-                size = androidx.compose.ui.geometry.Size(r*1.44f, r*1.44f), style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
-            val p = size.minDimension * .22f
-            drawLine(Color.White, Offset(center.x-p*.65f, center.y-p), Offset(center.x-p*.65f, center.y+p), 3.dp.toPx(), cap = StrokeCap.Round)
-            drawLine(Aqua, Offset(center.x-p*.65f, center.y), Offset(center.x+p*.65f, center.y-p), 3.dp.toPx(), cap = StrokeCap.Round)
-            drawLine(Blue, Offset(center.x-p*.65f, center.y), Offset(center.x+p*.65f, center.y+p), 3.dp.toPx(), cap = StrokeCap.Round)
-            drawCircle(Color.White, 2.2.dp.toPx(), Offset(center.x+r*.76f, center.y-r*.2f))
-        }
-    }
+    Image(
+        painter = painterResource(id = R.drawable.kivya_mark),
+        contentDescription = "KIVYA AI assistant logo",
+        modifier = modifier,
+    )
 }
 
 @Composable
@@ -980,7 +1018,7 @@ private fun QuickAction(label: String, icon: androidx.compose.ui.graphics.vector
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 12.dp)) {
             Icon(icon, null, tint = Aqua, modifier = Modifier.size(21.dp))
-            Text(label, color = Color(0xFFDCE7F6), fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
+            Text(label, color = Ivory.copy(alpha = .92f), fontSize = 10.sp, modifier = Modifier.padding(top = 5.dp))
         }
     }
 }

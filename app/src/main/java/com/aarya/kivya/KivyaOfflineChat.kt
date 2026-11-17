@@ -80,8 +80,10 @@ class KivyaOfflineChat(private val context: Context) {
             connection.connect()
             val status = connection.responseCode
             if (status !in 200..299) throw IllegalStateException("Model server ने HTTP $status दिया")
+            // Hugging Face/Xet redirects may omit Content-Length. Treat it as optional;
+            // validate the actual number of bytes received after streaming instead.
             val expected = connection.contentLengthLong
-            if (expected !in MIN_MODEL_BYTES..MAX_MODEL_BYTES) {
+            if (expected > 0 && expected !in MIN_MODEL_BYTES..MAX_MODEL_BYTES) {
                 throw IllegalStateException("मॉडल फ़ाइल का आकार अपेक्षा से अलग है ($expected bytes)")
             }
             connection.inputStream.use { input ->
@@ -92,17 +94,22 @@ class KivyaOfflineChat(private val context: Context) {
                     while (true) {
                         val count = input.read(buffer)
                         if (count < 0) break
-                        output.write(buffer, 0, count)
                         total += count
-                        val percent = ((total * 100) / expected).toInt().coerceIn(0, 100)
-                        if (percent != lastPercent) {
-                            lastPercent = percent
-                            onProgress(percent)
+                        if (total > MAX_MODEL_BYTES) {
+                            throw IllegalStateException("डाउनलोड सीमा से बड़ा है। सुरक्षित रूप से रोक दिया गया।")
+                        }
+                        output.write(buffer, 0, count)
+                        if (expected > 0) {
+                            val percent = ((total * 100) / expected).toInt().coerceIn(0, 99)
+                            if (percent != lastPercent) {
+                                lastPercent = percent
+                                onProgress(percent)
+                            }
                         }
                     }
                     output.flush()
-                    if (total != expected || total !in MIN_MODEL_BYTES..MAX_MODEL_BYTES) {
-                        throw IllegalStateException("डाउनलोड अधूरा है। फिर कोशिश करें।")
+                    if (total !in MIN_MODEL_BYTES..MAX_MODEL_BYTES || (expected > 0 && total != expected)) {
+                        throw IllegalStateException("डाउनलोड अधूरा या गलत आकार का है ($total bytes)। फिर कोशिश करें।")
                     }
                 }
             }
