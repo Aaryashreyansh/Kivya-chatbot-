@@ -25,6 +25,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -57,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
@@ -960,22 +962,11 @@ private fun KivyaHome(
 
 @Composable
 private fun KivyaMark(modifier: Modifier = Modifier) {
-    Box(modifier.background(Brush.linearGradient(listOf(Aqua.copy(alpha = .2f), Blue.copy(alpha = .2f))), RoundedCornerShape(18.dp))
-        .border(1.dp, Aqua.copy(alpha = .35f), RoundedCornerShape(18.dp)), contentAlignment = Alignment.Center) {
-        Canvas(Modifier.fillMaxSize().padding(7.dp)) {
-            val center = Offset(size.width / 2, size.height / 2)
-            val r = size.minDimension * .39f
-            drawCircle(Aqua.copy(alpha = .16f), r, center)
-            drawCircle(Brush.sweepGradient(listOf(Aqua, Blue, Color(0xFFB56BFF), Aqua)), r, center, style = Stroke(width = 2.6.dp.toPx()))
-            drawArc(Blue, 205f, 125f, false, topLeft = Offset(center.x-r*.72f, center.y-r*.72f),
-                size = androidx.compose.ui.geometry.Size(r*1.44f, r*1.44f), style = Stroke(width = 2.dp.toPx(), cap = StrokeCap.Round))
-            val p = size.minDimension * .22f
-            drawLine(Color.White, Offset(center.x-p*.65f, center.y-p), Offset(center.x-p*.65f, center.y+p), 3.dp.toPx(), cap = StrokeCap.Round)
-            drawLine(Aqua, Offset(center.x-p*.65f, center.y), Offset(center.x+p*.65f, center.y-p), 3.dp.toPx(), cap = StrokeCap.Round)
-            drawLine(Blue, Offset(center.x-p*.65f, center.y), Offset(center.x+p*.65f, center.y+p), 3.dp.toPx(), cap = StrokeCap.Round)
-            drawCircle(Color.White, 2.2.dp.toPx(), Offset(center.x+r*.76f, center.y-r*.2f))
-        }
-    }
+    Image(
+        painter = painterResource(id = R.drawable.kivya_mark),
+        contentDescription = "KIVYA AI assistant logo",
+        modifier = modifier,
+    )
 }
 
 @Composable
