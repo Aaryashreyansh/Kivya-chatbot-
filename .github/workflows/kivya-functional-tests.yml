@@ -75,6 +75,13 @@ jobs:
           # The legacy 'tools' package is no longer published by Google.
           packages: 'platform-tools'
 
+      - name: Install Android emulator system dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes libpulse0
+
       - name: Install Android emulator packages
         shell: bash
         run: |
