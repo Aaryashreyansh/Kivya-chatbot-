@@ -78,7 +78,23 @@ jobs:
       - name: Install Android emulator packages
         shell: bash
         run: |
+          set -euo pipefail
           sdkmanager --install "platform-tools" "emulator" "system-images;android-34;google_apis;x86_64"
+
+          # sdkmanager installs emulator under the SDK root, but that directory
+          # is not guaranteed to be on PATH on GitHub-hosted runners.
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-}}"
+          if [ -z "$SDK_ROOT" ] || [ ! -x "$SDK_ROOT/emulator/emulator" ]; then
+            echo "Android emulator binary was not found under SDK root: $SDK_ROOT"
+            find "${SDK_ROOT:-/nonexistent}" -maxdepth 3 -type f -name emulator -print 2>/dev/null || true
+            exit 1
+          fi
+          echo "$SDK_ROOT/emulator" >> "$GITHUB_PATH"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          export PATH="$SDK_ROOT/emulator:$SDK_ROOT/platform-tools:$PATH"
+          command -v emulator
+          emulator -version
+
           echo "no" | avdmanager create avd --force -n kivya-api34 -k "system-images;android-34;google_apis;x86_64" -d pixel_2
 
       - name: Boot Android emulator
